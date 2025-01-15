@@ -14,16 +14,17 @@
 int shader  = 0;
 
 bool game_over = false;
-int  ship_health = 100;
-int  ship_shield = 0;
 
 const int collision_damage = 13;
 const int mouse_sensitivity = 5;
-const int max_asteroids = 15;
-const float collision_radius = 1.4;
+const int max_asteroids = 20;
+const float collision_radius = 2.0;
 
 int rand_offset_y = 0;
 int rand_offset_z = 0;
+
+float rotation_x_last_tick = 0.0;
+float rotation_z_last_tick = 0.0;
 
 std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
 std::unique_ptr<Lazarus::CameraManager> camera_manager   = nullptr;
@@ -40,7 +41,6 @@ Lazarus::GlobalsManager                 globals;
 
 Lazarus::CameraManager::Camera          camera          = {};
 Lazarus::LightManager::Light            light           = {};
-Lazarus::MeshManager::Mesh              spaceship       = {};
 Lazarus::WorldFX::SkyBox                skybox          = {};
 
 int healthText = 0;
@@ -54,7 +54,15 @@ struct Asteroid
     Lazarus::MeshManager::Mesh mesh;
 };
 
+struct Spaceship
+{
+    int health, shield, ammo;
+    float x_rotation;
+    Lazarus::MeshManager::Mesh mesh;
+};
+
 std::vector<Asteroid>                   asteroids       = {};
+Spaceship spaceship = {};
 
 void generate_random_numbers()
 {
@@ -112,60 +120,26 @@ void init()
         asteroids.push_back(asteroid);
     };
 
-    spaceship = mesh_manager->create3DAsset("assets/mesh/shuttle.obj", "assets/material/shuttle.mtl");
+    spaceship.mesh = mesh_manager->create3DAsset("assets/mesh/shuttle.obj", "assets/material/shuttle.mtl");
+    spaceship.health = 100;
+    spaceship.shield = 0;
+    spaceship.x_rotation = 0.0;
     
-    transformer.translateMeshAsset(spaceship, -15.0, -1.0, 0.0);
-    transformer.rotateMeshAsset(spaceship, 0.0, 180.0, 0.0);
+    transformer.translateMeshAsset(spaceship.mesh, -15.0, -1.0, 0.0);
+    transformer.rotateMeshAsset(spaceship.mesh, 0.0, 180.0, 0.0);
 
     skybox = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
 
-    std::string hp = std::string("Ship health: ").append(std::to_string(ship_health));
+    std::string hp = std::string("Ship health: ").append(std::to_string(spaceship.health));
     healthText = text_manager->loadText(hp, 0, 0, 10, 1.0f, 0.0f, 0.0f);
-};
-
-void process_user_inputs()
-{    
-    float center_x = static_cast<float>(globals.getDisplayWidth() / 2);
-    float center_y = static_cast<float>(globals.getDisplayHeight() / 2);
-
-    int mouse_x = event_manager.mouseX;
-    int mouse_y = event_manager.mouseY;
-
-    if(mouse_x > (center_x) + mouse_sensitivity)
-    {
-        transformer.translateMeshAsset(spaceship, 0.0, 0.0, 0.1);
-        
-        window->snapCursor(center_x, center_y);
-    }
-    else if(mouse_x < (center_x) - mouse_sensitivity)
-    {
-        transformer.translateMeshAsset(spaceship, 0.0, 0.0, -0.1);
-        window->snapCursor(center_x, center_y);
-    };
-
-    if(mouse_y > (center_y) + mouse_sensitivity)
-    {
-        transformer.translateMeshAsset(spaceship, 0.0, -0.1, 0.0);
-        window->snapCursor(center_x, center_y);
-    }
-    else if(mouse_y < (center_y) - mouse_sensitivity)
-    {
-        transformer.translateMeshAsset(spaceship, 0.0, 0.1, 0.0);
-        window->snapCursor(center_x, center_y);
-    };
-
-    if(event_manager.keyCode == 88)
-    {
-        game_over = true;
-    };
 };
 
 void draw_assets()
 {
     world->drawSkyBox(skybox, camera);
 
-    mesh_manager->loadMesh(spaceship);
-    mesh_manager->drawMesh(spaceship);
+    mesh_manager->loadMesh(spaceship.mesh);
+    mesh_manager->drawMesh(spaceship.mesh);
 
     for(int i = 0; i < asteroids.size(); i++)
     {
@@ -205,6 +179,55 @@ void game_end()
     window->close();
 };
 
+void move_spaceship()
+{    
+    float center_x = static_cast<float>(globals.getDisplayWidth() / 2);
+    float center_y = static_cast<float>(globals.getDisplayHeight() / 2);
+
+    int mouse_x = event_manager.mouseX;
+    int mouse_y = event_manager.mouseY;
+
+    rotation_x_last_tick = spaceship.x_rotation;
+
+    if(mouse_x > (center_x) + mouse_sensitivity)
+    {
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);   
+        transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
+        window->snapCursor(center_x, center_y);
+
+        spaceship.x_rotation += 0.2;
+    }
+    else if(mouse_x < (center_x) - mouse_sensitivity)
+    {
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
+        transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
+        window->snapCursor(center_x, center_y);
+
+        spaceship.x_rotation += -0.2;
+    };
+
+    if(mouse_y > (center_y) + mouse_sensitivity)
+    {
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
+        transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);
+        window->snapCursor(center_x, center_y);
+    }
+    else if(mouse_y < (center_y) - mouse_sensitivity)
+    {
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
+        transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
+        window->snapCursor(center_x, center_y);
+    };
+
+    if(rotation_x_last_tick == spaceship.x_rotation)
+    {
+        transformer.rotateMeshAsset(spaceship.mesh, -spaceship.x_rotation, 0.0, 0.0);
+
+        spaceship.x_rotation = 0.0;
+    };
+
+};
+
 void move_asteroids()
 {
     for(int i = 0; i < asteroids.size(); i++)
@@ -228,12 +251,12 @@ void move_asteroids()
         };
 
         int collision = 0;
-        collision = check_collisions(spaceship, asteroids[i].mesh);
+        collision = check_collisions(spaceship.mesh, asteroids[i].mesh);
 
         if((collision == 1) && asteroids[i].has_colided == false)
         {
             asteroids[i].has_colided = true;
-            ship_health = ship_health - collision_damage;
+            spaceship.health = spaceship.health - collision_damage;
 
             generate_random_numbers();
             asteroids[i].z_rotation = rand_offset_z * 3;
@@ -241,15 +264,20 @@ void move_asteroids()
 
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, asteroids[i].y_rotation, asteroids[i].z_rotation);
 
-            std::string hp = std::string("Ship health: ").append(std::to_string(ship_health));
+            std::string hp = std::string("Ship health: ").append(std::to_string(spaceship.health));
             text_manager->loadText(hp, 0, 0, 10, 1.0f, 0.0f, 0.0f, healthText);
 
-            if(ship_health <= 0)
+            if(spaceship.health <= 0)
             {
                 game_over = true;
             };
         };
     };
+};
+
+void move_background()
+{
+    transformer.rotateMeshAsset(skybox.cube, 0.0, -0.5, 0.0);
 };
 
 int main()
@@ -270,13 +298,16 @@ int main()
         camera_manager->loadCamera(camera);
         light_manager->loadLightSource(light);
 
+        bool player_is_moving = false;
+
         draw_assets();
-        process_user_inputs();
+        move_spaceship();
         move_asteroids();
+        move_background();
 
         int status = globals.getExecutionState();
         
-        if(status != LAZARUS_OK)
+        if(status != LAZARUS_OK || event_manager.keyCode == 88)
         {
             game_end();
         }
