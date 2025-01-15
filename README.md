@@ -26,7 +26,7 @@ clang -std=c++17 main.cpp -lstdc++ -llazarus -lfreetype -lGLEW -l glfw -lGL -lfm
 
 **Compiling with `MSVC`:**
 ```
-fmod_vc.lib freetype.lib glfw3.lib glew32.lib opengl32.lib liblazarus.lib msvcrt.lib user32.lib gdi32.lib shell32.lib /out:saturn.exe /NODEFAULTLIB:libcmt
+cl /EHsc /std:c++17 main.cpp /link fmod_vc.lib freetype.lib glfw3.lib glew32.lib opengl32.lib liblazarus.lib msvcrt.lib user32.lib gdi32.lib shell32.lib /out:saturn.exe /NODEFAULTLIB:libcmt
 ```
 *Note: Again, some machines may not need to link against `user32.lib`, `msvcrt.lib`, `shell32.lib` or `gdi32.lib`. This depends on how your libraries are installed and how your compilers `PATH` variable is configured.*
 
