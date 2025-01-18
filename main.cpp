@@ -19,9 +19,10 @@ const int collision_damage = 13;
 const int mouse_sensitivity = 5;
 const int max_asteroids = 20;
 const float collision_radius = 2.0;
+const int health_bonus_frequency = 100;
 
-int rand_offset_y = 0;
-int rand_offset_z = 0;
+int rand_offset_b = 0;
+int rand_offset_a = 0;
 float rotation_x_last_tick = 0.0;
 float rotation_z_last_tick = 0.0;
 
@@ -43,6 +44,7 @@ Lazarus::LightManager::Light            light           = {};
 Lazarus::WorldFX::SkyBox                skybox          = {};
 
 int health_text_index = 0;
+int asteroids_since_last_bonus = 0;
 
 struct Asteroid
 {
@@ -60,15 +62,23 @@ struct Spaceship
     Lazarus::MeshManager::Mesh mesh;
 };
 
+struct Health
+{
+    int modifier, x_spawn_offset, y_spawn_offset;
+    bool has_colided;
+    Lazarus::MeshManager::Mesh mesh;
+};
+
 std::vector<Lazarus::AudioManager::Audio> samples = {};
 std::vector<Asteroid> asteroids = {};
 Spaceship spaceship = {};
+Health health_bonus = {};
 
 void generate_random_numbers()
 {
     //  Retrieve a random number between -8 and +8
-    rand_offset_y = (0 + (rand() % 16)) - 8;
-    rand_offset_z = (0 + (rand() % 16)) - 8;
+    rand_offset_b = (0 + (rand() % 16)) - 8;
+    rand_offset_a = (0 + (rand() % 16)) - 8;
 };
 
 void init()
@@ -76,7 +86,7 @@ void init()
     //  Engine settings
     globals.setEnforceImageSanity(true);
     globals.setMaxImageSize(500, 500);
-    globals.setLaunchInFullscreen(true);
+    // globals.setLaunchInFullscreen(true);
     globals.setCursorHidden(true);
 
     //  Construct window
@@ -116,14 +126,25 @@ void init()
 
         generate_random_numbers();
 
-        asteroid.y_spawn_offset = rand_offset_y;
-        asteroid.z_spawn_offset = rand_offset_z;
+        asteroid.y_spawn_offset = rand_offset_b;
+        asteroid.z_spawn_offset = rand_offset_a;
         
         asteroid.mesh = mesh_manager->create3DAsset("assets/mesh/asteroid.obj", "assets/material/asteroid.mtl", "assets/images/rock.png");
         transformer.translateMeshAsset(asteroid.mesh, -60.0 + (i * 5), asteroid.y_spawn_offset, asteroid.z_spawn_offset);  //  Start each asteroid at a different distance offset, so that they pass the respawn threshold at different times.
 
         asteroids.push_back(asteroid);
     };
+
+    //  Health powerup definition
+    generate_random_numbers();
+    health_bonus.x_spawn_offset = rand_offset_a;
+    health_bonus.y_spawn_offset = rand_offset_b;
+    health_bonus.mesh = mesh_manager->createQuad(2.0, 2.0, "assets/images/health_icon.png");
+    health_bonus.has_colided = false;
+    health_bonus.modifier = 15;
+    transformer.rotateMeshAsset(health_bonus.mesh, 0.0, 90.0, 0.0);
+    //  Note: Add additional +- 2.0 to x/y to accomidate for origin being bottom left corner
+    transformer.translateMeshAsset(health_bonus.mesh, health_bonus.x_spawn_offset + 2.0, health_bonus.y_spawn_offset - 2.0, -60.0);
 
     //  Spacial environment
     skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
@@ -153,20 +174,31 @@ void load_environment()
 
 void draw_assets()
 {
+    //  Draw spaceship
     mesh_manager->loadMesh(spaceship.mesh);
     mesh_manager->drawMesh(spaceship.mesh);
 
+    //  Draw each asteroid
     for(int i = 0; i < asteroids.size(); i++)
     {
         mesh_manager->loadMesh(asteroids[i].mesh);
         mesh_manager->drawMesh(asteroids[i].mesh);
     };
 
-    //  Note: Draw text last to overlay
+    //  Draw health powerup
+    //  Note: Only if it hasn't already been picked up
+    if(!health_bonus.has_colided)
+    {
+        mesh_manager->loadMesh(health_bonus.mesh);
+        mesh_manager->drawMesh(health_bonus.mesh);
+    };
+
+    //  Draw HUD
+    //  Note: Text is drawn last to overlay
     text_manager->drawText(health_text_index);
 };
 
-inline int check_collisions(Lazarus::MeshManager::Mesh a, Lazarus::MeshManager::Mesh b)
+int check_collisions(Lazarus::MeshManager::Mesh a, Lazarus::MeshManager::Mesh b)
 {
         //  Find the distance between two points in a volume
         //  d = √((x2 – x1)² + (y2 – y1)² + (z2 – z1)²).
@@ -264,6 +296,7 @@ void move_asteroids()
         //  Reset asteroid position
         if(asteroids[i].mesh.locationX > 0.0)
         {
+            asteroids_since_last_bonus += 1;
             asteroids[i].has_colided = false;
             //  Invert sign of last rotate + translate to move back to origin
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, -asteroids[i].y_rotation, -asteroids[i].z_rotation);
@@ -275,9 +308,9 @@ void move_asteroids()
             generate_random_numbers();
 
             //  Move asteroid to random offset from center
-            transformer.translateMeshAsset(asteroids[i].mesh, 0.0, static_cast<float>(rand_offset_y), static_cast<float>(rand_offset_z));
-            asteroids[i].z_spawn_offset = rand_offset_z;
-            asteroids[i].y_spawn_offset = rand_offset_y;
+            transformer.translateMeshAsset(asteroids[i].mesh, 0.0, static_cast<float>(rand_offset_b), static_cast<float>(rand_offset_a));
+            asteroids[i].z_spawn_offset = rand_offset_a;
+            asteroids[i].y_spawn_offset = rand_offset_b;
         };
 
         int collision = 0;
@@ -285,7 +318,7 @@ void move_asteroids()
 
         //  Check collision result
         //  Note: Use has_colided so as not to clock 50+ collisions in a frame
-        if((collision == 1) && asteroids[i].has_colided == false)
+        if((collision == 1) && !asteroids[i].has_colided)
         {
             asteroids[i].has_colided = true;
 
@@ -295,12 +328,12 @@ void move_asteroids()
 
             //  Bounce asteroid off ship
             generate_random_numbers();
-            asteroids[i].z_rotation = rand_offset_z * 3;
-            asteroids[i].y_rotation = rand_offset_y * 3;
+            asteroids[i].z_rotation = rand_offset_a * 3;
+            asteroids[i].y_rotation = rand_offset_b * 3;
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, asteroids[i].y_rotation, asteroids[i].z_rotation);
 
             //  Update ship health
-            spaceship.health = spaceship.health - collision_damage;
+            spaceship.health -= collision_damage;
             text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
 
             if(spaceship.health <= 0)
@@ -316,6 +349,54 @@ void move_background()
     transformer.rotateMeshAsset(skybox.cube, 0.0, -0.2, 0.0);
 };
 
+void move_health_powerup()
+{
+    int collision = check_collisions(spaceship.mesh, health_bonus.mesh);
+
+    if(collision == 1 && !health_bonus.has_colided)
+    {
+        health_bonus.has_colided = true;
+
+        for(int i = 0; i < health_bonus.modifier; i++)
+        {
+            if(spaceship.health == 100) break;
+            spaceship.health += 1;
+        };
+        
+        text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
+
+        //  TODO:
+        //  Play some "rejuvination" sound on pickup
+    }
+
+    if(health_bonus.mesh.locationX > 0.0)
+    {
+        health_bonus.has_colided = true;
+    }
+
+    if(!health_bonus.has_colided)
+    {
+        //  Travel on z because rotated 90deg
+        //  Note: Transforms are performed on an asset's local-coordinate system
+        transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, 0.1);
+    }
+
+    if(asteroids_since_last_bonus == health_bonus_frequency)
+    {
+        health_bonus.has_colided = false;
+        transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, -60.0);
+        asteroids_since_last_bonus = 0;
+
+        transformer.translateMeshAsset(health_bonus.mesh, -static_cast<float>(-health_bonus.x_spawn_offset), static_cast<float>(-health_bonus.y_spawn_offset), 0.0);
+        
+        generate_random_numbers();
+        //  Move health to random offset from center
+        transformer.translateMeshAsset(health_bonus.mesh, static_cast<float>(rand_offset_a), static_cast<float>(rand_offset_b), 0.0);
+        health_bonus.x_spawn_offset = rand_offset_a;
+        health_bonus.y_spawn_offset = rand_offset_b;
+    };
+};
+
 int main()
 {
     init();
@@ -323,6 +404,7 @@ int main()
 
     while(window->isOpen)
     {
+        std::cout << "asteroids since last bonus: " << asteroids_since_last_bonus << std::endl;
         event_manager.listen();
 
         //  Render scene
@@ -332,6 +414,7 @@ int main()
         //  Do game mechanics
         move_spaceship();
         move_asteroids();
+        move_health_powerup();
         move_background();
         
         if
