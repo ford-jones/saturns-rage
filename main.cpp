@@ -26,6 +26,9 @@ int rand_offset_a = 0;
 float rotation_x_last_tick = 0.0;
 float rotation_z_last_tick = 0.0;
 
+float turn_y = 0.0;
+float turn_z = 0.0;
+
 std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
 std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
 std::unique_ptr<Lazarus::CameraManager> camera_manager   = nullptr;
@@ -86,7 +89,7 @@ void init()
     //  Engine settings
     globals.setEnforceImageSanity(true);
     globals.setMaxImageSize(500, 500);
-    // globals.setLaunchInFullscreen(true);
+    globals.setLaunchInFullscreen(true);
     globals.setCursorHidden(true);
 
     //  Construct window
@@ -244,8 +247,11 @@ void move_spaceship()
     //  Move right
     if(mouse_x > (center_x) + mouse_sensitivity)
     {
+        turn_y += 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);   
         transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
+        transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.02);
+        // transformer.rotateCameraAsset(camera, 0.0, turn_y, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation += 0.2;
@@ -253,8 +259,11 @@ void move_spaceship()
     //  Move left
     else if(mouse_x < (center_x) - mouse_sensitivity)
     {
+        turn_y -= 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
+        transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.02);
+        // transformer.rotateCameraAsset(camera, 0.0, turn_y, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation += -0.2;
@@ -263,15 +272,21 @@ void move_spaceship()
     //  Move up
     if(mouse_y > (center_y) + mouse_sensitivity)
     {
+        turn_z += 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
         transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);
+        transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.02);
+        // transformer.rotateCameraAsset(camera, 0.0, 0.0, turn_z);
         window->snapCursor(center_x, center_y);
     }
     //  Move down
     else if(mouse_y < (center_y) - mouse_sensitivity)
     {
+        turn_z -= 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
         transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
+        transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.02);
+        // transformer.rotateCameraAsset(camera, 0.0, 0.0, turn_z);
         window->snapCursor(center_x, center_y);
     };
 
@@ -353,34 +368,30 @@ void move_health_powerup()
 {
     int collision = check_collisions(spaceship.mesh, health_bonus.mesh);
 
+    //  Health pickup being collected
     if(collision == 1 && !health_bonus.has_colided)
     {
         health_bonus.has_colided = true;
 
+        //  Add 15 units of health up to a maximum of 100hp
         for(int i = 0; i < health_bonus.modifier; i++)
         {
             if(spaceship.health == 100) break;
             spaceship.health += 1;
         };
         
+        //  Update HUD
         text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
 
         //  TODO:
         //  Play some "rejuvination" sound on pickup
     }
 
-    if(health_bonus.mesh.locationX > 0.0)
-    {
-        health_bonus.has_colided = true;
-    }
+    //  Health pickup has moved beyond camera viewport
+    if(health_bonus.mesh.locationX > 0.0) health_bonus.has_colided = true;
 
-    if(!health_bonus.has_colided)
-    {
-        //  Travel on z because rotated 90deg
-        //  Note: Transforms are performed on an asset's local-coordinate system
-        transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, 0.1);
-    }
 
+    //  If 100 asteroids have passed the camera viewport, reset the health pickup
     if(asteroids_since_last_bonus == health_bonus_frequency)
     {
         health_bonus.has_colided = false;
@@ -395,6 +406,13 @@ void move_health_powerup()
         health_bonus.x_spawn_offset = rand_offset_a;
         health_bonus.y_spawn_offset = rand_offset_b;
     };
+    
+    //  Move health pickup.
+    //  Note: 
+    //  Travel on z because rotated 90deg
+    //  Transforms INS are performed on an asset's local-coordinate system. 
+    //  Notice the values printed by health_bonus.location* (i.e. OUTS) show where the object is in the world coordinate system.
+    if(!health_bonus.has_colided) transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, 0.1);
 };
 
 int main()
