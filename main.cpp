@@ -1,8 +1,8 @@
 /* =========================================
     Saturns Rage
     Ford Jones
-    Jan 15 2025
-    Lazarus v0.4.4
+    Jan 19 2025
+    Lazarus v0.5.0
 ============================================ */
 
 #include <lazarus.h>
@@ -52,7 +52,7 @@ int asteroids_since_last_bonus = 0;
 struct Asteroid
 {
     int z_spawn_offset, y_spawn_offset;
-    float z_rotation, y_rotation, movement_speed;
+    float z_rotation, y_rotation, movement_speed, scale;
     bool has_colided;
 
     Lazarus::MeshManager::Mesh mesh;
@@ -131,9 +131,14 @@ void init()
 
         asteroid.y_spawn_offset = rand_offset_b;
         asteroid.z_spawn_offset = rand_offset_a;
+
+        //  Add 8.0 to ensure a positively signed number, otherwise the meshes model matrix will invert 
+        asteroid.scale = (rand_offset_a + 8.0f) / 4.0f;
         
         asteroid.mesh = mesh_manager->create3DAsset("assets/mesh/asteroid.obj", "assets/material/asteroid.mtl", "assets/images/rock.png");
-        transformer.translateMeshAsset(asteroid.mesh, -60.0 + (i * 5), asteroid.y_spawn_offset, asteroid.z_spawn_offset);  //  Start each asteroid at a different distance offset, so that they pass the respawn threshold at different times.
+        //  Start each asteroid at a different distance offset, so that they pass the respawn threshold at different times.
+        transformer.translateMeshAsset(asteroid.mesh, -60.0 + (i * 5), asteroid.y_spawn_offset, asteroid.z_spawn_offset);  
+        transformer.scaleMeshAsset(asteroid.mesh, asteroid.scale, asteroid.scale, asteroid.scale);
 
         asteroids.push_back(asteroid);
     };
@@ -160,6 +165,7 @@ void init()
 
     //  Load audio
     samples.push_back(audio_manager->createAudio("assets/sound/crash1.mp3"));
+    samples.push_back(audio_manager->createAudio("assets/sound/headswirler.wav", false, -1));
     for(int i = 0; i < samples.size(); i++)
     {
         audio_manager->loadAudio(samples[i]);
@@ -419,6 +425,8 @@ int main()
 {
     init();
     window->open();
+
+    audio_manager->playAudio(samples[1]);
 
     while(window->isOpen)
     {
