@@ -1,8 +1,8 @@
 /* =========================================
     Saturns Rage
     Ford Jones
-    Jan 19 2025
-    Lazarus v0.5.0
+    Jan 20 2025
+    Lazarus v0.5.1
 ============================================ */
 
 #include <lazarus.h>
@@ -23,6 +23,7 @@ const int health_bonus_frequency = 100;
 
 int rand_offset_b = 0;
 int rand_offset_a = 0;
+int keycode_last_tick = 0;
 float rotation_x_last_tick = 0.0;
 float rotation_z_last_tick = 0.0;
 
@@ -58,12 +59,6 @@ struct Asteroid
     Lazarus::MeshManager::Mesh mesh;
 };
 
-struct Spaceship
-{
-    int health, shield, ammo;
-    float x_rotation;
-    Lazarus::MeshManager::Mesh mesh;
-};
 
 struct Health
 {
@@ -72,7 +67,23 @@ struct Health
     Lazarus::MeshManager::Mesh mesh;
 };
 
+struct Missile
+{
+    bool is_spent;
+    bool is_travelling;
+    Lazarus::MeshManager::Mesh mesh;
+};
+
+struct Spaceship
+{
+    int health, shield, ammo;
+    float x_rotation;
+    std::vector<Missile> missiles;
+    Lazarus::MeshManager::Mesh mesh;
+};
+
 std::vector<Lazarus::AudioManager::Audio> samples = {};
+std::vector<Missile> missiles = {};
 std::vector<Asteroid> asteroids = {};
 Spaceship spaceship = {};
 Health health_bonus = {};
@@ -89,12 +100,12 @@ void init()
     //  Engine settings
     globals.setEnforceImageSanity(true);
     globals.setMaxImageSize(500, 500);
-    globals.setLaunchInFullscreen(true);
+    // globals.setLaunchInFullscreen(true);
     globals.setCursorHidden(true);
 
     //  Construct window
     //  TODO: Fix the need to be init window prior to shader
-    window = std::make_unique<Lazarus::WindowManager>("Saturns Rage");
+    window = std::make_unique<Lazarus::WindowManager>("Saturns Rage", 1200, 1000);
 
     //  Initialise resources
     window->initialise();
@@ -112,16 +123,18 @@ void init()
 
     //  Spaceship definition
     spaceship.mesh = mesh_manager->create3DAsset("assets/mesh/shuttle.obj", "assets/material/shuttle.mtl");
+    spaceship.missiles = {};
     spaceship.health = 100;
     spaceship.shield = 0;
     spaceship.x_rotation = 0.0;
+    spaceship.ammo = 3;
     transformer.translateMeshAsset(spaceship.mesh, -15.0, -1.0, 0.0);
     transformer.rotateMeshAsset(spaceship.mesh, 0.0, 180.0, 0.0);
 
     //  Asteroid(s) definition
     for(int i = 0; i < max_asteroids; i++)
     {
-        Asteroid asteroid;
+        Asteroid asteroid = {};
         asteroid.has_colided = false;
         asteroid.movement_speed = 0.08 + (static_cast<float>(i) / 100);
         asteroid.y_rotation = 0.0;
@@ -151,12 +164,23 @@ void init()
     health_bonus.has_colided = false;
     health_bonus.modifier = 15;
     transformer.rotateMeshAsset(health_bonus.mesh, 0.0, 90.0, 0.0);
-    //  Note: Add additional +- 2.0 to x/y to accomidate for origin being bottom left corner
-    transformer.translateMeshAsset(health_bonus.mesh, health_bonus.x_spawn_offset + 2.0, health_bonus.y_spawn_offset - 2.0, -60.0);
+    transformer.translateMeshAsset(health_bonus.mesh, health_bonus.x_spawn_offset, health_bonus.y_spawn_offset, -60.0);
+
+    // Missiles
+    for(int i = 0; i < spaceship.ammo; i++)
+    {
+        Missile missile = {};
+        missile.is_spent = false;
+        missile.is_travelling = false;
+        missile.mesh = mesh_manager->create3DAsset("assets/mesh/rocket.obj", "assets/material/rocket.mtl");
+
+        missiles.push_back(missile);
+        spaceship.missiles.push_back(missile);
+    };
 
     //  Spacial environment
     skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
-    light   = light_manager->createLightSource(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+    light   = light_manager->createLightSource(-1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
     camera  = camera_manager->createPerspectiveCam(0.0, -0.2, 0.0, 1.0, 0.0, 0.0);
 
     //  HUD
@@ -201,6 +225,17 @@ void draw_assets()
         mesh_manager->loadMesh(health_bonus.mesh);
         mesh_manager->drawMesh(health_bonus.mesh);
     };
+
+    //  Draw missiles
+    for(int i = 0; i < missiles.size(); i++)
+    {
+        if(missiles[i].is_travelling)
+        {
+            mesh_manager->loadMesh(missiles[i].mesh);
+            mesh_manager->drawMesh(missiles[i].mesh);
+        };
+    }
+    // };
 
     //  Draw HUD
     //  Note: Text is drawn last to overlay
@@ -421,6 +456,29 @@ void move_health_powerup()
     if(!health_bonus.has_colided) transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, 0.1);
 };
 
+void move_rockets()
+{
+    for(int i = 0; i < missiles.size(); i++)
+    {
+        if(
+            event_manager.keyCode == 32 && 
+            (spaceship.ammo - 1) == i   && 
+            event_manager.keyCode != keycode_last_tick
+        ) 
+        {
+            spaceship.ammo -= 1;
+            missiles[i].is_travelling = true;
+        };
+
+        if(missiles[i].is_travelling)
+        {
+            transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
+        };
+    };
+
+    keycode_last_tick = event_manager.keyCode;
+};
+
 int main()
 {
     init();
@@ -442,7 +500,10 @@ int main()
         move_asteroids();
         move_health_powerup();
         move_background();
-        
+        move_rockets();
+
+        std::cout << "Ammo: " << spaceship.ammo << std::endl;
+
         if
         (
             globals.getExecutionState() != LAZARUS_OK   || // If some error has surfaced from engine state
