@@ -20,15 +20,14 @@ const int mouse_sensitivity = 5;
 const int max_asteroids = 20;
 const float collision_radius = 2.0;
 const int health_bonus_frequency = 100;
+const int max_health = 100;
+const int max_ammo = 30;
 
 int rand_offset_b = 0;
 int rand_offset_a = 0;
 int keycode_last_tick = 0;
 float rotation_x_last_tick = 0.0;
 float rotation_z_last_tick = 0.0;
-
-float turn_y = 0.0;
-float turn_z = 0.0;
 
 std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
 std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
@@ -59,7 +58,6 @@ struct Asteroid
     Lazarus::MeshManager::Mesh mesh;
 };
 
-
 struct Health
 {
     int modifier, x_spawn_offset, y_spawn_offset;
@@ -69,7 +67,7 @@ struct Health
 
 struct Missile
 {
-    bool is_spent;
+    float y_spawn_offset, z_spawn_offset;
     bool is_travelling;
     Lazarus::MeshManager::Mesh mesh;
 };
@@ -100,12 +98,12 @@ void init()
     //  Engine settings
     globals.setEnforceImageSanity(true);
     globals.setMaxImageSize(500, 500);
-    // globals.setLaunchInFullscreen(true);
+    globals.setLaunchInFullscreen(true);
     globals.setCursorHidden(true);
 
     //  Construct window
     //  TODO: Fix the need to be init window prior to shader
-    window = std::make_unique<Lazarus::WindowManager>("Saturns Rage", 1200, 1000);
+    window = std::make_unique<Lazarus::WindowManager>("Saturns Rage");
 
     //  Initialise resources
     window->initialise();
@@ -123,11 +121,11 @@ void init()
 
     //  Spaceship definition
     spaceship.mesh = mesh_manager->create3DAsset("assets/mesh/shuttle.obj", "assets/material/shuttle.mtl");
-    spaceship.missiles = {};
-    spaceship.health = 100;
+    spaceship.health = max_health;
+    spaceship.ammo = max_ammo;
     spaceship.shield = 0;
     spaceship.x_rotation = 0.0;
-    spaceship.ammo = 3;
+    spaceship.missiles = {};
     transformer.translateMeshAsset(spaceship.mesh, -15.0, -1.0, 0.0);
     transformer.rotateMeshAsset(spaceship.mesh, 0.0, 180.0, 0.0);
 
@@ -170,10 +168,11 @@ void init()
     for(int i = 0; i < spaceship.ammo; i++)
     {
         Missile missile = {};
-        missile.is_spent = false;
         missile.is_travelling = false;
+        missile.y_spawn_offset = 0.0;
+        missile.z_spawn_offset = 0.0;
         missile.mesh = mesh_manager->create3DAsset("assets/mesh/rocket.obj", "assets/material/rocket.mtl");
-
+        transformer.translateMeshAsset(missile.mesh, -15.0, 0.0, 0.0);
         missiles.push_back(missile);
         spaceship.missiles.push_back(missile);
     };
@@ -235,7 +234,6 @@ void draw_assets()
             mesh_manager->drawMesh(missiles[i].mesh);
         };
     }
-    // };
 
     //  Draw HUD
     //  Note: Text is drawn last to overlay
@@ -288,11 +286,9 @@ void move_spaceship()
     //  Move right
     if(mouse_x > (center_x) + mouse_sensitivity)
     {
-        turn_y += 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);   
         transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
         transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.02);
-        // transformer.rotateCameraAsset(camera, 0.0, turn_y, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation += 0.2;
@@ -300,34 +296,26 @@ void move_spaceship()
     //  Move left
     else if(mouse_x < (center_x) - mouse_sensitivity)
     {
-        turn_y -= 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
         transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.02);
-        // transformer.rotateCameraAsset(camera, 0.0, turn_y, 0.0);
         window->snapCursor(center_x, center_y);
 
-        spaceship.x_rotation += -0.2;
+        spaceship.x_rotation -= 0.2;
     };
 
     //  Move up
     if(mouse_y > (center_y) + mouse_sensitivity)
     {
-        turn_z += 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
-        transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);
         transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.02);
-        // transformer.rotateCameraAsset(camera, 0.0, 0.0, turn_z);
         window->snapCursor(center_x, center_y);
     }
     //  Move down
     else if(mouse_y < (center_y) - mouse_sensitivity)
     {
-        turn_z -= 3.0;
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
-        transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.02);
-        // transformer.rotateCameraAsset(camera, 0.0, 0.0, turn_z);
         window->snapCursor(center_x, center_y);
     };
 
@@ -429,8 +417,10 @@ void move_health_powerup()
     }
 
     //  Health pickup has moved beyond camera viewport
-    if(health_bonus.mesh.locationX > 0.0) health_bonus.has_colided = true;
-
+    if(health_bonus.mesh.locationX > 0.0)
+    { 
+        health_bonus.has_colided = true;
+    };
 
     //  If 100 asteroids have passed the camera viewport, reset the health pickup
     if(asteroids_since_last_bonus == health_bonus_frequency)
@@ -460,6 +450,7 @@ void move_rockets()
 {
     for(int i = 0; i < missiles.size(); i++)
     {
+        //  Fire missiles with spacebar
         if(
             event_manager.keyCode == 32 && 
             (spaceship.ammo - 1) == i   && 
@@ -468,14 +459,27 @@ void move_rockets()
         {
             spaceship.ammo -= 1;
             missiles[i].is_travelling = true;
+            missiles[i].y_spawn_offset = spaceship.mesh.locationY;
+            missiles[i].z_spawn_offset = spaceship.mesh.locationZ;
+            transformer.translateMeshAsset(missiles[i].mesh, -1.0, missiles[i].y_spawn_offset, missiles[i].z_spawn_offset);
         };
 
+        //  Advance traveling missiles
         if(missiles[i].is_travelling)
         {
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
-        };
+        }
+
+        //  Reset missiles which have reached the bounds
+        if(missiles[i].mesh.locationX <= -60.0f)
+        {
+            missiles[i].is_travelling = false;
+            transformer.translateMeshAsset(missiles[i].mesh, 60.0f, -missiles[i].y_spawn_offset, -missiles[i].z_spawn_offset);
+        }
     };
 
+    //  Retrieve latest keydown event
+    //  Note: Used to control rate of fire
     keycode_last_tick = event_manager.keyCode;
 };
 
