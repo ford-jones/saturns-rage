@@ -15,19 +15,19 @@ int shader  = 0;
 
 bool game_over = false;
 
-const int collision_damage = 13;
-const int mouse_sensitivity = 5;
-const int max_asteroids = 20;
 const float collision_radius = 2.0;
-const int health_bonus_frequency = 100;
-const int max_health = 100;
-const int max_ammo = 30;
+const int   collision_damage = 13;
+const int   mouse_sensitivity = 5;
+const int   max_asteroids = 20;
+const int   health_bonus_frequency = 100;
+const int   max_health = 100;
+const int   max_ammo = 30;
 
-int rand_offset_b = 0;
-int rand_offset_a = 0;
-int keycode_last_tick = 0;
-float rotation_x_last_tick = 0.0;
-float rotation_z_last_tick = 0.0;
+int     rand_offset_b = 0;
+int     rand_offset_a = 0;
+int     keycode_last_tick = 0;
+float   rotation_x_last_tick = 0.0;
+float   rotation_z_last_tick = 0.0;
 
 std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
 std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
@@ -47,6 +47,7 @@ Lazarus::LightManager::Light            light           = {};
 Lazarus::WorldFX::SkyBox                skybox          = {};
 
 int health_text_index = 0;
+int ammo_text_index = 0;
 int asteroids_since_last_bonus = 0;
 
 struct Asteroid
@@ -54,6 +55,7 @@ struct Asteroid
     int z_spawn_offset, y_spawn_offset;
     float z_rotation, y_rotation, movement_speed, scale;
     bool has_colided;
+    bool exploded;
 
     Lazarus::MeshManager::Mesh mesh;
 };
@@ -134,6 +136,7 @@ void init()
     {
         Asteroid asteroid = {};
         asteroid.has_colided = false;
+        asteroid.exploded = false;
         asteroid.movement_speed = 0.08 + (static_cast<float>(i) / 100);
         asteroid.y_rotation = 0.0;
         asteroid.z_rotation = 0.0;
@@ -185,6 +188,7 @@ void init()
     //  HUD
     text_manager->extendFontStack("assets/fonts/clock.ttf", 50);
     health_text_index = text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f);
+    ammo_text_index = text_manager->loadText(std::string("Ammo: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f);
 
     //  Load audio
     samples.push_back(audio_manager->createAudio("assets/sound/crash1.mp3"));
@@ -213,8 +217,11 @@ void draw_assets()
     //  Draw each asteroid
     for(int i = 0; i < asteroids.size(); i++)
     {
-        mesh_manager->loadMesh(asteroids[i].mesh);
-        mesh_manager->drawMesh(asteroids[i].mesh);
+        if(!asteroids[i].exploded)
+        {
+            mesh_manager->loadMesh(asteroids[i].mesh);
+            mesh_manager->drawMesh(asteroids[i].mesh);
+        }
     };
 
     //  Draw health powerup
@@ -237,7 +244,10 @@ void draw_assets()
 
     //  Draw HUD
     //  Note: Text is drawn last to overlay
+    text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
     text_manager->drawText(health_text_index);
+    text_manager->loadText(std::string("Ammo: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f, ammo_text_index);
+    text_manager->drawText(ammo_text_index);
 };
 
 int check_collisions(Lazarus::MeshManager::Mesh a, Lazarus::MeshManager::Mesh b)
@@ -342,6 +352,7 @@ void move_asteroids()
         {
             asteroids_since_last_bonus += 1;
             asteroids[i].has_colided = false;
+            asteroids[i].exploded = false;
             //  Invert sign of last rotate + translate to move back to origin
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, -asteroids[i].y_rotation, -asteroids[i].z_rotation);
             transformer.translateMeshAsset(asteroids[i].mesh, -60.0, static_cast<float>(-asteroids[i].y_spawn_offset), static_cast<float>(-asteroids[i].z_spawn_offset));
@@ -378,7 +389,7 @@ void move_asteroids()
 
             //  Update ship health
             spaceship.health -= collision_damage;
-            text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
+            // text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
 
             if(spaceship.health <= 0)
             {
@@ -468,6 +479,19 @@ void move_rockets()
         if(missiles[i].is_travelling)
         {
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
+
+            //  Check collisions
+            for(int j = 0; j < asteroids.size(); j++)
+            {
+                int colided = check_collisions(missiles[i].mesh, asteroids[j].mesh);
+
+                if(colided == 1)
+                {
+                    // std::cout << "COLISION" << std::endl;
+                    asteroids[j].exploded = true;
+                    
+                };
+            };
         }
 
         //  Reset missiles which have reached the bounds
@@ -477,6 +501,7 @@ void move_rockets()
             transformer.translateMeshAsset(missiles[i].mesh, 60.0f, -missiles[i].y_spawn_offset, -missiles[i].z_spawn_offset);
         }
     };
+
 
     //  Retrieve latest keydown event
     //  Note: Used to control rate of fire
