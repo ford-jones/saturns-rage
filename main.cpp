@@ -46,7 +46,6 @@ Lazarus::GlobalsManager                 globals;
 
 Lazarus::CameraManager::Camera          camera          = {};
 Lazarus::LightManager::Light            point_light     = {};
-Lazarus::LightManager::Light            explosion       = {};
 Lazarus::WorldFX::SkyBox                skybox          = {};
 
 int health_text_index = 0;
@@ -75,6 +74,7 @@ struct Missile
     float y_spawn_offset, z_spawn_offset;
     bool is_travelling;
     Lazarus::MeshManager::Mesh mesh;
+    Lazarus::LightManager::Light explosion;
 };
 
 struct Spaceship
@@ -177,6 +177,7 @@ void init()
         missile.is_travelling = false;
         missile.y_spawn_offset = 0.0;
         missile.z_spawn_offset = 0.0;
+        missile.explosion = light_manager->createLightSource(-1.0, 0.0, 0.0, 0.9, 0.5, 0.0, 0.0);
         missile.mesh = mesh_manager->create3DAsset("assets/mesh/rocket.obj", "assets/material/rocket.mtl");
         transformer.translateMeshAsset(missile.mesh, -15.0, 0.0, 0.0);
         missiles.push_back(missile);
@@ -186,7 +187,6 @@ void init()
     //  Spacial environment
     skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
     point_light = light_manager->createLightSource(-1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
-    explosion = light_manager->createLightSource(-1.0, 0.0, 0.0, 0.9, 0.5, 0.0, 0.0);
     camera  = camera_manager->createPerspectiveCam(0.0, -0.2, 0.0, 1.0, 0.0, 0.0);
 
     //  HUD
@@ -208,7 +208,11 @@ void load_environment()
 {
     camera_manager->loadCamera(camera);
     light_manager->loadLightSource(point_light);
-    light_manager->loadLightSource(explosion);
+
+    for(int i = 0; i < missiles.size(); i++)
+    {
+        light_manager->loadLightSource(missiles[i].explosion);
+    };
 
     world->drawSkyBox(skybox, camera);
 };
@@ -303,7 +307,7 @@ void move_spaceship()
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);   
         transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
-        transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.02);
+        // transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.02);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation += 0.2;
@@ -313,7 +317,7 @@ void move_spaceship()
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
-        transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.02);
+        // transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.02);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation -= 0.2;
@@ -323,14 +327,14 @@ void move_spaceship()
     if(mouse_y > (center_y) + mouse_sensitivity)
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
-        transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.02);
+        // transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.02);
         window->snapCursor(center_x, center_y);
     }
     //  Move down
     else if(mouse_y < (center_y) - mouse_sensitivity)
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
-        transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.02);
+        // transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.02);
         window->snapCursor(center_x, center_y);
     };
 
@@ -374,7 +378,11 @@ void move_asteroids()
         };
 
         int collision = 0;
-        collision = check_collisions(spaceship.mesh, asteroids[i].mesh);
+        
+        if(!asteroids[i].exploded)
+        {
+            collision = check_collisions(spaceship.mesh, asteroids[i].mesh);
+        };
 
         //  Check collision result
         //  Note: Use has_colided so as not to clock 50+ collisions in a frame
@@ -394,7 +402,6 @@ void move_asteroids()
 
             //  Update ship health
             spaceship.health -= collision_damage;
-            // text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
 
             if(spaceship.health <= 0)
             {
@@ -496,21 +503,21 @@ void move_rockets()
             //  Hold explosion glow for 30 frames
             if(frame_count == 30 && brightness_last_tick > 0.0)
             {
-                explosion.brightness = 0.0;
+                missiles[i].explosion.brightness = 0.0;
             };
 
             //  Check collisions
             for(int j = 0; j < asteroids.size(); j++)
             {
                 int colided = check_collisions(missiles[i].mesh, asteroids[j].mesh);
-                // explosion.brightness = 0.0;
+                // missiles[i].explosion.brightness = 0.0;
                 if(colided == 1)
                 {
                     asteroids[j].exploded = true;
                     //  TODO:
                     //  Play audio 
-                    explosion.brightness = 3.0;
-                    brightness_last_tick = explosion.brightness;
+                    missiles[i].explosion.brightness = 3.0;
+                    brightness_last_tick = missiles[i].explosion.brightness;
                 };
             };
         }
