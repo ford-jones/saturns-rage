@@ -23,11 +23,13 @@ const int   health_bonus_frequency = 100;
 const int   max_health = 100;
 const int   max_ammo = 30;
 
+int     frame_count = 0;
 int     rand_offset_b = 0;
 int     rand_offset_a = 0;
 int     keycode_last_tick = 0;
 float   rotation_x_last_tick = 0.0;
 float   rotation_z_last_tick = 0.0;
+float   brightness_last_tick = 0.0;
 
 std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
 std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
@@ -43,7 +45,8 @@ Lazarus::EventManager                   event_manager;
 Lazarus::GlobalsManager                 globals;
 
 Lazarus::CameraManager::Camera          camera          = {};
-Lazarus::LightManager::Light            light           = {};
+Lazarus::LightManager::Light            point_light     = {};
+Lazarus::LightManager::Light            explosion       = {};
 Lazarus::WorldFX::SkyBox                skybox          = {};
 
 int health_text_index = 0;
@@ -182,7 +185,8 @@ void init()
 
     //  Spacial environment
     skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
-    light   = light_manager->createLightSource(-1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+    point_light = light_manager->createLightSource(-1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+    explosion = light_manager->createLightSource(-1.0, 0.0, 0.0, 0.9, 0.5, 0.0, 0.0);
     camera  = camera_manager->createPerspectiveCam(0.0, -0.2, 0.0, 1.0, 0.0, 0.0);
 
     //  HUD
@@ -203,7 +207,8 @@ void init()
 void load_environment()
 {
     camera_manager->loadCamera(camera);
-    light_manager->loadLightSource(light);
+    light_manager->loadLightSource(point_light);
+    light_manager->loadLightSource(explosion);
 
     world->drawSkyBox(skybox, camera);
 };
@@ -459,6 +464,14 @@ void move_health_powerup()
 
 void move_rockets()
 {
+    if(frame_count < 30)
+    {
+        frame_count += 1;
+    }
+    else
+    {
+        frame_count = 0;
+    };
     for(int i = 0; i < missiles.size(); i++)
     {
         //  Fire missiles with spacebar
@@ -480,16 +493,24 @@ void move_rockets()
         {
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
 
+            //  Hold explosion glow for 30 frames
+            if(frame_count == 30 && brightness_last_tick > 0.0)
+            {
+                explosion.brightness = 0.0;
+            };
+
             //  Check collisions
             for(int j = 0; j < asteroids.size(); j++)
             {
                 int colided = check_collisions(missiles[i].mesh, asteroids[j].mesh);
-
+                // explosion.brightness = 0.0;
                 if(colided == 1)
                 {
-                    // std::cout << "COLISION" << std::endl;
                     asteroids[j].exploded = true;
-                    
+                    //  TODO:
+                    //  Play audio 
+                    explosion.brightness = 3.0;
+                    brightness_last_tick = explosion.brightness;
                 };
             };
         }
@@ -530,8 +551,6 @@ int main()
         move_health_powerup();
         move_background();
         move_rockets();
-
-        std::cout << "Ammo: " << spaceship.ammo << std::endl;
 
         if
         (
