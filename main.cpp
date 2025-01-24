@@ -350,10 +350,10 @@ void move_spaceship()
     //  Move right
     if(mouse_x > (center_x) + mouse_sensitivity)
     {
-        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);   
-        transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
-        transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.01);
         transformer.translateLightAsset(point_light, 0.2, 0.0, 0.0);
+        transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.01);
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);
+        transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation += 0.2;
@@ -361,10 +361,10 @@ void move_spaceship()
     //  Move left
     else if(mouse_x < (center_x) - mouse_sensitivity)
     {
+        transformer.translateLightAsset(point_light, -0.2, 0.0, 0.0);
+        transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.01);
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
-        transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.01);
-        transformer.translateLightAsset(point_light, -0.2, 0.0, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation -= 0.2;
@@ -373,17 +373,17 @@ void move_spaceship()
     //  Move up
     if(mouse_y > (center_y) + mouse_sensitivity)
     {
-        transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
-        transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.01);
         transformer.translateLightAsset(point_light, 0.0, -0.2, 0.0);
+        transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.01);
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
         window->snapCursor(center_x, center_y);
     }
     //  Move down
     else if(mouse_y < (center_y) - mouse_sensitivity)
     {
-        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
-        transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.01);
         transformer.translateLightAsset(point_light, 0.0, 0.2, 0.0);
+        transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.01);
+        transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
         window->snapCursor(center_x, center_y);
     };
 
@@ -450,7 +450,7 @@ void move_asteroids()
 
             //  Set crash1.mp3 back to begining and play
             audio_manager->setPlaybackCursor(samples[0], 1);
-            // audio_manager->playAudio(samples[0]);
+            audio_manager->playAudio(samples[0]);
 
             //  Bounce asteroid off ship
             generate_random_numbers();
@@ -604,7 +604,7 @@ int main()
     init();
     window->open();
 
-    // audio_manager->playAudio(samples[1]);
+    audio_manager->playAudio(samples[1]);
 
     while(window->isOpen)
     {
