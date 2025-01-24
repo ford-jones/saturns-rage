@@ -18,7 +18,7 @@ bool game_over = false;
 const float collision_radius = 2.0;
 const int   collision_damage = 13;
 const int   mouse_sensitivity = 5;
-const int   max_asteroids = 20;
+const int   starting_asteroids = 20;
 const int   health_bonus_frequency = 100;
 const int   max_health = 100;
 const int   max_ammo = 30;
@@ -57,6 +57,7 @@ struct Asteroid
     int z_spawn_offset, y_spawn_offset;
     float z_rotation, y_rotation, movement_speed, scale;
     bool has_colided;
+    bool is_fragment;
     bool exploded;
 
     Lazarus::MeshManager::Mesh mesh;
@@ -73,6 +74,7 @@ struct Missile
 {
     float y_spawn_offset, z_spawn_offset;
     bool is_travelling;
+    bool has_colided;
     Lazarus::MeshManager::Mesh mesh;
     Lazarus::LightManager::Light explosion;
 };
@@ -135,10 +137,11 @@ void init()
     transformer.rotateMeshAsset(spaceship.mesh, 0.0, 180.0, 0.0);
 
     //  Asteroid(s) definition
-    for(int i = 0; i < max_asteroids; i++)
+    for(int i = 0; i < starting_asteroids; i++)
     {
         Asteroid asteroid = {};
         asteroid.has_colided = false;
+        asteroid.is_fragment = false;
         asteroid.exploded = false;
         asteroid.movement_speed = 0.08 + (static_cast<float>(i) / 100);
         asteroid.y_rotation = 0.0;
@@ -175,6 +178,7 @@ void init()
     {
         Missile missile = {};
         missile.is_travelling = false;
+        missile.has_colided = false;
         missile.y_spawn_offset = 0.0;
         missile.z_spawn_offset = 0.0;
         missile.explosion = light_manager->createLightSource(-1.0, 0.0, 0.0, 0.9, 0.5, 0.0, 0.0);
@@ -201,6 +205,39 @@ void init()
     {
         audio_manager->loadAudio(samples[i]);
         audio_manager->pauseAudio(samples[i]);
+    };
+};
+
+void fracture_asteroid(Asteroid parent)
+{
+    int target_size = asteroids.size() + 3;
+
+    //  Create 3 new asteroids and add them to the container
+    while(asteroids.size() < target_size)
+    {
+        Asteroid asteroid = {};
+        asteroid.has_colided = false;
+        asteroid.is_fragment = true;
+        asteroid.exploded = false;
+        asteroid.movement_speed = parent.movement_speed * 1.5;
+
+        generate_random_numbers();
+        asteroid.y_rotation = rand_offset_a * 3.0;
+        asteroid.z_rotation = rand_offset_b * 3.0;
+
+        asteroid.y_spawn_offset = 0.0;
+        asteroid.z_spawn_offset = 0.0;
+
+        //  Make fragment 2x smaller than parent
+        asteroid.scale = parent.scale / 2.0;
+        
+        //  Copy parent's mesh, including it's current location
+        asteroid.mesh = parent.mesh;
+        transformer.scaleMeshAsset(asteroid.mesh, asteroid.scale, asteroid.scale, asteroid.scale);
+        transformer.rotateMeshAsset(asteroid.mesh, 0.0, asteroid.y_rotation, asteroid.z_rotation);
+
+
+        asteroids.push_back(asteroid);
     };
 };
 
@@ -359,22 +396,31 @@ void move_asteroids()
         //  Reset asteroid position
         if(asteroids[i].mesh.locationX > 0.0)
         {
-            asteroids_since_last_bonus += 1;
-            asteroids[i].has_colided = false;
-            asteroids[i].exploded = false;
-            //  Invert sign of last rotate + translate to move back to origin
-            transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, -asteroids[i].y_rotation, -asteroids[i].z_rotation);
-            transformer.translateMeshAsset(asteroids[i].mesh, -60.0, static_cast<float>(-asteroids[i].y_spawn_offset), static_cast<float>(-asteroids[i].z_spawn_offset));
+            if(asteroids[i].is_fragment)
+            {
+                int current_size = asteroids.size();
+                asteroids.resize(current_size - 1);
+            }
+            else
+            {
+                asteroids_since_last_bonus += 1;
+                asteroids[i].has_colided = false;
+                asteroids[i].exploded = false;
+                //  Invert sign of last rotate + translate to move back to origin
+                transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, -asteroids[i].y_rotation, -asteroids[i].z_rotation);
+                transformer.translateMeshAsset(asteroids[i].mesh, -60.0, static_cast<float>(-asteroids[i].y_spawn_offset), static_cast<float>(-asteroids[i].z_spawn_offset));
 
-            asteroids[i].z_rotation = 0.0;
-            asteroids[i].y_rotation = 0.0;
+                asteroids[i].z_rotation = 0.0;
+                asteroids[i].y_rotation = 0.0;
 
-            generate_random_numbers();
+                generate_random_numbers();
 
-            //  Move asteroid to random offset from center
-            transformer.translateMeshAsset(asteroids[i].mesh, 0.0, static_cast<float>(rand_offset_b), static_cast<float>(rand_offset_a));
-            asteroids[i].z_spawn_offset = rand_offset_a;
-            asteroids[i].y_spawn_offset = rand_offset_b;
+                //  Move asteroid to random offset from center
+                transformer.translateMeshAsset(asteroids[i].mesh, 0.0, static_cast<float>(rand_offset_b), static_cast<float>(rand_offset_a));
+                asteroids[i].z_spawn_offset = rand_offset_a;
+                asteroids[i].y_spawn_offset = rand_offset_b;
+            }
+
         };
 
         int collision = 0;
@@ -396,8 +442,8 @@ void move_asteroids()
 
             //  Bounce asteroid off ship
             generate_random_numbers();
-            asteroids[i].z_rotation = rand_offset_a * 3;
-            asteroids[i].y_rotation = rand_offset_b * 3;
+            asteroids[i].z_rotation = rand_offset_a * 3.0;
+            asteroids[i].y_rotation = rand_offset_b * 3.0;
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, asteroids[i].y_rotation, asteroids[i].z_rotation);
 
             //  Update ship health
@@ -431,9 +477,6 @@ void move_health_powerup()
             if(spaceship.health == 100) break;
             spaceship.health += 1;
         };
-        
-        //  Update HUD
-        text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
 
         //  TODO:
         //  Play some "rejuvination" sound on pickup
@@ -501,9 +544,12 @@ void move_rockets()
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
 
             //  Hold explosion glow for 30 frames
-            if(frame_count == 30 && brightness_last_tick > 0.0)
+            if(frame_count >= 30 && brightness_last_tick > 0.0)
             {
                 missiles[i].explosion.brightness = 0.0;
+                missiles[i].explosion.locationX -= missiles[i].explosion.locationX;
+                missiles[i].explosion.locationY -= missiles[i].explosion.locationY;
+                missiles[i].explosion.locationZ -= missiles[i].explosion.locationZ;
             };
 
             //  Check collisions
@@ -511,13 +557,16 @@ void move_rockets()
             {
                 int colided = check_collisions(missiles[i].mesh, asteroids[j].mesh);
                 // missiles[i].explosion.brightness = 0.0;
-                if(colided == 1)
+                if(colided == 1 && !asteroids[j].exploded && !missiles[i].has_colided)
                 {
+                    transformer.translateLightAsset(missiles[i].explosion, missiles[i].mesh.locationX, missiles[i].mesh.locationY, missiles[i].mesh.locationZ);
                     asteroids[j].exploded = true;
+                    missiles[i].has_colided = true;
                     //  TODO:
                     //  Play audio 
                     missiles[i].explosion.brightness = 3.0;
                     brightness_last_tick = missiles[i].explosion.brightness;
+                    fracture_asteroid(asteroids[j]);
                 };
             };
         }
@@ -526,6 +575,8 @@ void move_rockets()
         if(missiles[i].mesh.locationX <= -60.0f)
         {
             missiles[i].is_travelling = false;
+            missiles[i].has_colided = false;
+            missiles[i].explosion.brightness = 0.0;
             transformer.translateMeshAsset(missiles[i].mesh, 60.0f, -missiles[i].y_spawn_offset, -missiles[i].z_spawn_offset);
         }
     };
