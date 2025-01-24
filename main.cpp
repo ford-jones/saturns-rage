@@ -1,8 +1,8 @@
 /* =========================================
     Saturns Rage
     Ford Jones
-    Jan 20 2025
-    Lazarus v0.5.1
+    Jan 24 2025
+    Lazarus v0.5.2
 ============================================ */
 
 #include <lazarus.h>
@@ -16,7 +16,7 @@ int shader  = 0;
 bool game_over = false;
 
 const float collision_radius = 2.0;
-const int   collision_damage = 13;
+const int   base_collision_damage = 10;
 const int   mouse_sensitivity = 5;
 const int   starting_asteroids = 20;
 const int   health_bonus_frequency = 100;
@@ -54,6 +54,7 @@ int asteroids_since_last_bonus = 0;
 
 struct Asteroid
 {
+    int damage_modifier;
     int z_spawn_offset, y_spawn_offset;
     float z_rotation, y_rotation, movement_speed, scale;
     bool has_colided;
@@ -153,7 +154,9 @@ void init()
         asteroid.z_spawn_offset = rand_offset_a;
 
         //  Add 8.0 to ensure a positively signed number, otherwise the meshes model matrix will invert 
+        //  Note: Between +2.0 and +4.0
         asteroid.scale = (rand_offset_a + 8.0f) / 4.0f;
+        asteroid.damage_modifier = base_collision_damage + asteroid.scale;
         
         asteroid.mesh = mesh_manager->create3DAsset("assets/mesh/asteroid.obj", "assets/material/asteroid.mtl", "assets/images/rock.png");
         //  Start each asteroid at a different distance offset, so that they pass the respawn threshold at different times.
@@ -169,7 +172,7 @@ void init()
     health_bonus.y_spawn_offset = rand_offset_b;
     health_bonus.mesh = mesh_manager->createQuad(2.0, 2.0, "assets/images/health_icon.png");
     health_bonus.has_colided = false;
-    health_bonus.modifier = 15;
+    health_bonus.modifier = 20;
     transformer.rotateMeshAsset(health_bonus.mesh, 0.0, 90.0, 0.0);
     transformer.translateMeshAsset(health_bonus.mesh, health_bonus.x_spawn_offset, health_bonus.y_spawn_offset, -60.0);
 
@@ -190,7 +193,7 @@ void init()
 
     //  Spacial environment
     skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
-    point_light = light_manager->createLightSource(-1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+    point_light = light_manager->createLightSource(-8.5, 0.0, 0.0, 1.0, 1.0, 1.0);
     camera  = camera_manager->createPerspectiveCam(0.0, -0.2, 0.0, 1.0, 0.0, 0.0);
 
     //  HUD
@@ -212,33 +215,38 @@ void fracture_asteroid(Asteroid parent)
 {
     int target_size = asteroids.size() + 3;
 
-    //  Create 3 new asteroids and add them to the container
-    while(asteroids.size() < target_size)
+    //  Dont repeat if fragments are getting too small
+    if(!((parent.scale / 2.0) < 0.5))
     {
-        Asteroid asteroid = {};
-        asteroid.has_colided = false;
-        asteroid.is_fragment = true;
-        asteroid.exploded = false;
-        asteroid.movement_speed = parent.movement_speed * 1.5;
+        while(asteroids.size() < target_size)
+        {
+            //  Create 3 new asteroids and add them to the container
+            Asteroid asteroid = {};
+            asteroid.has_colided = false;
+            asteroid.is_fragment = true;
+            asteroid.exploded = false;
+            asteroid.movement_speed = parent.movement_speed * 1.5;
 
-        generate_random_numbers();
-        asteroid.y_rotation = rand_offset_a * 3.0;
-        asteroid.z_rotation = rand_offset_b * 3.0;
+            generate_random_numbers();
+            asteroid.y_rotation = rand_offset_a * 3.0;
+            asteroid.z_rotation = rand_offset_b * 3.0;
 
-        asteroid.y_spawn_offset = 0.0;
-        asteroid.z_spawn_offset = 0.0;
+            asteroid.y_spawn_offset = 0.0;
+            asteroid.z_spawn_offset = 0.0;
 
-        //  Make fragment 2x smaller than parent
-        asteroid.scale = parent.scale / 2.0;
-        
-        //  Copy parent's mesh, including it's current location
-        asteroid.mesh = parent.mesh;
-        transformer.scaleMeshAsset(asteroid.mesh, asteroid.scale, asteroid.scale, asteroid.scale);
-        transformer.rotateMeshAsset(asteroid.mesh, 0.0, asteroid.y_rotation, asteroid.z_rotation);
+            //  Make fragment 2x smaller than parent
+            asteroid.scale = parent.scale / 2.0;
+            asteroid.damage_modifier = floor(base_collision_damage + asteroid.scale);
+
+            //  Copy parent's mesh, including it's current location
+            asteroid.mesh = parent.mesh;
+            transformer.scaleMeshAsset(asteroid.mesh, asteroid.scale, asteroid.scale, asteroid.scale);
+            transformer.rotateMeshAsset(asteroid.mesh, 0.0, asteroid.y_rotation, asteroid.z_rotation);
 
 
-        asteroids.push_back(asteroid);
-    };
+            asteroids.push_back(asteroid);
+        };
+    }
 };
 
 void load_environment()
@@ -344,7 +352,8 @@ void move_spaceship()
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);   
         transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
-        // transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.02);
+        transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.01);
+        transformer.translateLightAsset(point_light, 0.2, 0.0, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation += 0.2;
@@ -354,7 +363,8 @@ void move_spaceship()
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
-        // transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.02);
+        transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.01);
+        transformer.translateLightAsset(point_light, -0.2, 0.0, 0.0);
         window->snapCursor(center_x, center_y);
 
         spaceship.x_rotation -= 0.2;
@@ -364,14 +374,16 @@ void move_spaceship()
     if(mouse_y > (center_y) + mouse_sensitivity)
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
-        // transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.02);
+        transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.01);
+        transformer.translateLightAsset(point_light, 0.0, -0.2, 0.0);
         window->snapCursor(center_x, center_y);
     }
     //  Move down
     else if(mouse_y < (center_y) - mouse_sensitivity)
     {
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
-        // transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.02);
+        transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.01);
+        transformer.translateLightAsset(point_light, 0.0, 0.2, 0.0);
         window->snapCursor(center_x, center_y);
     };
 
@@ -438,7 +450,7 @@ void move_asteroids()
 
             //  Set crash1.mp3 back to begining and play
             audio_manager->setPlaybackCursor(samples[0], 1);
-            audio_manager->playAudio(samples[0]);
+            // audio_manager->playAudio(samples[0]);
 
             //  Bounce asteroid off ship
             generate_random_numbers();
@@ -447,7 +459,7 @@ void move_asteroids()
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, asteroids[i].y_rotation, asteroids[i].z_rotation);
 
             //  Update ship health
-            spaceship.health -= collision_damage;
+            spaceship.health -= asteroids[i].damage_modifier;
 
             if(spaceship.health <= 0)
             {
@@ -514,7 +526,7 @@ void move_health_powerup()
 
 void move_rockets()
 {
-    if(frame_count < 30)
+    if(frame_count < 60)
     {
         frame_count += 1;
     }
@@ -544,7 +556,7 @@ void move_rockets()
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
 
             //  Hold explosion glow for 30 frames
-            if(frame_count >= 30 && brightness_last_tick > 0.0)
+            if(frame_count >= 60 && brightness_last_tick > 0.0)
             {
                 missiles[i].explosion.brightness = 0.0;
                 missiles[i].explosion.locationX -= missiles[i].explosion.locationX;
@@ -592,11 +604,10 @@ int main()
     init();
     window->open();
 
-    audio_manager->playAudio(samples[1]);
+    // audio_manager->playAudio(samples[1]);
 
     while(window->isOpen)
     {
-        std::cout << "asteroids since last bonus: " << asteroids_since_last_bonus << std::endl;
         event_manager.listen();
 
         //  Render scene
