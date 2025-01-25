@@ -15,21 +15,21 @@ int shader  = 0;
 
 bool game_over = false;
 
-const float collision_radius = 2.0;
-const int   base_collision_damage = 10;
-const int   mouse_sensitivity = 5;
-const int   starting_asteroids = 20;
-const int   health_bonus_frequency = 100;
-const int   max_health = 100;
-const int   max_ammo = 30;
+const float collision_radius        = 2.0;
+const int   base_collision_damage   = 10;
+const int   mouse_sensitivity       = 5;
+const int   starting_asteroids      = 20;
+const int   health_bonus_frequency  = 100;
+const int   max_health              = 100;
+const int   max_ammo                = 30;
 
-int     frame_count = 0;
-int     rand_offset_b = 0;
-int     rand_offset_a = 0;
-int     keycode_last_tick = 0;
-float   rotation_x_last_tick = 0.0;
-float   rotation_z_last_tick = 0.0;
-float   brightness_last_tick = 0.0;
+int     frame_count             = 0;
+int     rand_offset_b           = 0;
+int     rand_offset_a           = 0;
+int     keycode_last_tick       = 0;
+float   rotation_x_last_tick    = 0.0;
+float   rotation_z_last_tick    = 0.0;
+float   brightness_last_tick    = 0.0;
 
 std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
 std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
@@ -50,23 +50,19 @@ Lazarus::WorldFX::SkyBox                skybox          = {};
 
 int health_text_index = 0;
 int ammo_text_index = 0;
-int asteroids_since_last_bonus = 0;
 
 struct Asteroid
 {
-    int damage_modifier;
-    int z_spawn_offset, y_spawn_offset;
+    int damage_modifier, z_spawn_offset, y_spawn_offset;
     float z_rotation, y_rotation, movement_speed, scale;
-    bool has_colided;
-    bool is_fragment;
-    bool exploded;
+    bool has_colided, is_fragment, exploded;
 
     Lazarus::MeshManager::Mesh mesh;
 };
 
-struct Health
+struct PowerUp
 {
-    int modifier, x_spawn_offset, y_spawn_offset;
+    int modifier, x_spawn_offset, y_spawn_offset, appearance_frequency, asteroid_counter, type; 
     bool has_colided;
     Lazarus::MeshManager::Mesh mesh;
 };
@@ -92,7 +88,8 @@ std::vector<Lazarus::AudioManager::Audio> samples = {};
 std::vector<Missile> missiles = {};
 std::vector<Asteroid> asteroids = {};
 Spaceship spaceship = {};
-Health health_bonus = {};
+PowerUp health_bonus = {};
+PowerUp ammo_bonus = {};
 
 void generate_random_numbers()
 {
@@ -168,13 +165,29 @@ void init()
 
     //  Health powerup definition
     generate_random_numbers();
+    health_bonus.type = 1;
     health_bonus.x_spawn_offset = rand_offset_a;
     health_bonus.y_spawn_offset = rand_offset_b;
     health_bonus.mesh = mesh_manager->createQuad(2.0, 2.0, "assets/images/health_icon.png");
+    health_bonus.appearance_frequency = 80;
+    health_bonus.asteroid_counter = 0;
     health_bonus.has_colided = false;
     health_bonus.modifier = 20;
     transformer.rotateMeshAsset(health_bonus.mesh, 0.0, 90.0, 0.0);
-    transformer.translateMeshAsset(health_bonus.mesh, health_bonus.x_spawn_offset, health_bonus.y_spawn_offset, -60.0);
+    transformer.translateMeshAsset(health_bonus.mesh, health_bonus.x_spawn_offset, health_bonus.y_spawn_offset, -80.0);
+
+    //  Ammo powerup definition
+    generate_random_numbers();
+    ammo_bonus.type = 2;
+    ammo_bonus.x_spawn_offset = rand_offset_a;
+    ammo_bonus.y_spawn_offset = rand_offset_b;
+    ammo_bonus.mesh = mesh_manager->createQuad(2.0, 2.0, "assets/images/ammo_icon.png");
+    ammo_bonus.appearance_frequency = 150;
+    ammo_bonus.asteroid_counter = 0;
+    ammo_bonus.has_colided = false;
+    ammo_bonus.modifier = max_ammo;
+    transformer.rotateMeshAsset(ammo_bonus.mesh, 0.0, 90.0, 0.0);
+    transformer.translateMeshAsset(ammo_bonus.mesh, ammo_bonus.x_spawn_offset, ammo_bonus.y_spawn_offset, -60.0);
 
     // Missiles
     for(int i = 0; i < spaceship.ammo; i++)
@@ -286,6 +299,13 @@ void draw_assets()
         mesh_manager->drawMesh(health_bonus.mesh);
     };
 
+    //  Draw ammo powerup
+    if(!ammo_bonus.has_colided)
+    {
+        mesh_manager->loadMesh(ammo_bonus.mesh);
+        mesh_manager->drawMesh(ammo_bonus.mesh);
+    };
+
     //  Draw missiles
     for(int i = 0; i < missiles.size(); i++)
     {
@@ -294,7 +314,7 @@ void draw_assets()
             mesh_manager->loadMesh(missiles[i].mesh);
             mesh_manager->drawMesh(missiles[i].mesh);
         };
-    }
+    };
 
     //  Draw HUD
     //  Note: Text is drawn last to overlay
@@ -408,6 +428,7 @@ void move_asteroids()
         //  Reset asteroid position
         if(asteroids[i].mesh.locationX > 0.0)
         {
+            //  Kick child asteroids out
             if(asteroids[i].is_fragment)
             {
                 int current_size = asteroids.size();
@@ -415,7 +436,8 @@ void move_asteroids()
             }
             else
             {
-                asteroids_since_last_bonus += 1;
+                health_bonus.asteroid_counter += 1;
+                ammo_bonus.asteroid_counter += 1;
                 asteroids[i].has_colided = false;
                 asteroids[i].exploded = false;
                 //  Invert sign of last rotate + translate to move back to origin
@@ -450,7 +472,7 @@ void move_asteroids()
 
             //  Set crash1.mp3 back to begining and play
             audio_manager->setPlaybackCursor(samples[0], 1);
-            audio_manager->playAudio(samples[0]);
+            // audio_manager->playAudio(samples[0]);
 
             //  Bounce asteroid off ship
             generate_random_numbers();
@@ -474,54 +496,68 @@ void move_background()
     transformer.rotateMeshAsset(skybox.cube, 0.0, -0.2, 0.0);
 };
 
-void move_health_powerup()
+void move_powerup(PowerUp &powerup)
 {
-    int collision = check_collisions(spaceship.mesh, health_bonus.mesh);
+    int collision = check_collisions(spaceship.mesh, powerup.mesh);
 
-    //  Health pickup being collected
-    if(collision == 1 && !health_bonus.has_colided)
+    //  Powerup being collected
+    if(collision == 1 && !powerup.has_colided)
     {
-        health_bonus.has_colided = true;
+        powerup.has_colided = true;
 
-        //  Add 15 units of health up to a maximum of 100hp
-        for(int i = 0; i < health_bonus.modifier; i++)
+        //  Health  = 1
+        //  Ammo    = 2
+        if(powerup.type == 1)
         {
-            if(spaceship.health == 100) break;
-            spaceship.health += 1;
+            int target_health = spaceship.health + powerup.modifier;
+            while((spaceship.health < target_health) && spaceship.health != max_health)
+            {
+                spaceship.health += 1;
+            }
+        }
+        else
+        {
+            int target_ammo = spaceship.ammo + powerup.modifier;
+            while((spaceship.ammo < target_ammo) && spaceship.ammo != max_ammo)
+            {
+                spaceship.ammo += 1;
+            }
         };
 
         //  TODO:
         //  Play some "rejuvination" sound on pickup
     }
 
-    //  Health pickup has moved beyond camera viewport
-    if(health_bonus.mesh.locationX > 0.0)
+    //  Powerup has moved beyond camera viewport
+    if(powerup.mesh.locationX > 0.0)
     { 
-        health_bonus.has_colided = true;
+        powerup.has_colided = true;
     };
 
-    //  If 100 asteroids have passed the camera viewport, reset the health pickup
-    if(asteroids_since_last_bonus == health_bonus_frequency)
+    //  Reset
+    if(powerup.asteroid_counter == powerup.appearance_frequency)
     {
-        health_bonus.has_colided = false;
-        transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, -60.0);
-        asteroids_since_last_bonus = 0;
+        powerup.has_colided = false;
+        transformer.translateMeshAsset(powerup.mesh, 0.0, 0.0, -60);
 
-        transformer.translateMeshAsset(health_bonus.mesh, -static_cast<float>(-health_bonus.x_spawn_offset), static_cast<float>(-health_bonus.y_spawn_offset), 0.0);
+        //  Set counter back on ammo collect
+        powerup.asteroid_counter = 0;
+
+        transformer.translateMeshAsset(powerup.mesh, -static_cast<float>(-powerup.x_spawn_offset), static_cast<float>(-powerup.y_spawn_offset), 0.0);
         
         generate_random_numbers();
         //  Move health to random offset from center
-        transformer.translateMeshAsset(health_bonus.mesh, static_cast<float>(rand_offset_a), static_cast<float>(rand_offset_b), 0.0);
-        health_bonus.x_spawn_offset = rand_offset_a;
-        health_bonus.y_spawn_offset = rand_offset_b;
+        transformer.translateMeshAsset(powerup.mesh, static_cast<float>(rand_offset_a), static_cast<float>(rand_offset_b), 0.0);
+        powerup.x_spawn_offset = rand_offset_a;
+        powerup.y_spawn_offset = rand_offset_b;
     };
     
-    //  Move health pickup.
+    //  Move powerup.
     //  Note: 
     //  Travel on z because rotated 90deg
     //  Transforms INS are performed on an asset's local-coordinate system. 
-    //  Notice the values printed by health_bonus.location* (i.e. OUTS) show where the object is in the world coordinate system.
-    if(!health_bonus.has_colided) transformer.translateMeshAsset(health_bonus.mesh, 0.0, 0.0, 0.1);
+    //  Notice the values printed by powerup.location* (i.e. OUTS) show where the object is in the world coordinate system.
+    if(!powerup.has_colided) transformer.translateMeshAsset(powerup.mesh, 0.0, 0.0, 0.1);
 };
 
 void move_rockets()
@@ -604,7 +640,7 @@ int main()
     init();
     window->open();
 
-    audio_manager->playAudio(samples[1]);
+    // audio_manager->playAudio(samples[1]);
 
     while(window->isOpen)
     {
@@ -617,7 +653,8 @@ int main()
         //  Do game mechanics
         move_spaceship();
         move_asteroids();
-        move_health_powerup();
+        move_powerup(ammo_bonus);
+        move_powerup(health_bonus);
         move_background();
         move_rockets();
 
