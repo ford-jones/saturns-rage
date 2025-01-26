@@ -210,9 +210,17 @@ void init()
     };
 
     //  Spacial environment
-    skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
     point_light = light_manager->createLightSource(-8.5, 0.0, 0.0, 1.0, 1.0, 1.0);
     camera  = camera_manager->createPerspectiveCam(0.0, -0.2, 0.0, 1.0, 0.0, 0.0);
+    skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
+    saturn_planet = mesh_manager->create3DAsset("assets/mesh/saturn_planet.obj", "assets/material/saturn_planet.mtl", "assets/images/planet.png");
+    saturn_ring = mesh_manager->create3DAsset("assets/mesh/saturn_ring.obj", "assets/material/saturn_ring.mtl", "assets/images/ring.png");
+    transformer.translateMeshAsset(saturn_planet, -60.0, 2.0, -15.0);
+    transformer.translateMeshAsset(saturn_ring, -60.0, 2.0, -15.0);
+    transformer.rotateMeshAsset(saturn_planet, 20.0, 0.0, -20.0);
+    transformer.rotateMeshAsset(saturn_ring, 20.0, 0.0, -20.0);
+    transformer.scaleMeshAsset(saturn_planet, 2.0, 2.0, 2.0);
+    transformer.scaleMeshAsset(saturn_ring, 2.0, 2.0, 2.0);
 
     //  HUD
     text_manager->extendFontStack("assets/fonts/clock.ttf", 50);
@@ -322,6 +330,11 @@ void draw_assets()
             mesh_manager->drawMesh(missiles[i].mesh);
         };
     };
+
+    mesh_manager->loadMesh(saturn_planet);
+    mesh_manager->drawMesh(saturn_planet);
+    mesh_manager->loadMesh(saturn_ring);
+    mesh_manager->drawMesh(saturn_ring);
 
     //  Draw HUD
     //  Note: Text is drawn last to overlay
