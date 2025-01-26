@@ -13,6 +13,8 @@
 
 int shader  = 0;
 
+int player_points = 0;
+bool player_ready = false;
 bool game_over = false;
 
 const float collision_radius        = 2.0;
@@ -82,8 +84,8 @@ Lazarus::WorldFX::SkyBox                skybox          = {};
 Lazarus::MeshManager::Mesh              saturn_planet   = {};
 Lazarus::MeshManager::Mesh              saturn_ring     = {};
 
-int player_points = 0;
-
+int title_text_index = 0;
+int begin_text_index = 0;
 int health_text_index = 0;
 int ammo_text_index = 0;
 int points_text_index = 0;
@@ -213,10 +215,11 @@ void init()
     point_light = light_manager->createLightSource(-8.5, 0.0, 0.0, 1.0, 1.0, 1.0);
     camera  = camera_manager->createPerspectiveCam(0.0, -0.2, 0.0, 1.0, 0.0, 0.0);
     skybox  = world->createSkyBox("assets/skybox/right.png", "assets/skybox/left.png", "assets/skybox/bottom.png", "assets/skybox/top.png", "assets/skybox/front.png", "assets/skybox/back.png");
+    transformer.rotateMeshAsset(skybox.cube, 90.0, 0.0, 0.0);
     saturn_planet = mesh_manager->create3DAsset("assets/mesh/saturn_planet.obj", "assets/material/saturn_planet.mtl", "assets/images/planet.png");
     saturn_ring = mesh_manager->create3DAsset("assets/mesh/saturn_ring.obj", "assets/material/saturn_ring.mtl", "assets/images/ring.png");
-    transformer.translateMeshAsset(saturn_planet, -60.0, 2.0, -15.0);
-    transformer.translateMeshAsset(saturn_ring, -60.0, 2.0, -15.0);
+    transformer.translateMeshAsset(saturn_planet, -85.0, 2.0, -25.0);
+    transformer.translateMeshAsset(saturn_ring, -85.0, 2.0, -25.0);
     transformer.rotateMeshAsset(saturn_planet, 20.0, 0.0, -20.0);
     transformer.rotateMeshAsset(saturn_ring, 20.0, 0.0, -20.0);
     transformer.scaleMeshAsset(saturn_planet, 2.0, 2.0, 2.0);
@@ -224,13 +227,16 @@ void init()
 
     //  HUD
     text_manager->extendFontStack("assets/fonts/clock.ttf", 50);
+    title_text_index = text_manager->loadText("SATURNS RAGE", (globals.getDisplayWidth() / 2) - 260, 1000, 10, 1.0, 0.0, 0.0);
+    begin_text_index = text_manager->loadText("PRESS [ENTER] TO BEGIN", (globals.getDisplayWidth() / 2) - 500, globals.getDisplayHeight() / 2, 10, 1.0, 1.0, 1.0);
     health_text_index = text_manager->loadText(std::string("SHIP HEALTH: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f);
     ammo_text_index = text_manager->loadText(std::string("AMMO: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f);
-    points_text_index = text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 0.9f, 0.5f, 0.0f);
+    points_text_index = text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 1.0f, 1.0f, 1.0f);
 
     //  Load audio
     samples.push_back(audio_manager->createAudio("assets/sound/crash1.mp3"));
     samples.push_back(audio_manager->createAudio("assets/sound/headswirler.wav", false, -1));
+    // samples.push_back(audio_manager->createAudio("assets/sound/rocket.mp3", true, -1));
     for(int i = 0; i < samples.size(); i++)
     {
         audio_manager->loadAudio(samples[i]);
@@ -292,6 +298,11 @@ void load_environment()
 
 void draw_assets()
 {
+    mesh_manager->loadMesh(saturn_planet);
+    mesh_manager->drawMesh(saturn_planet);
+    mesh_manager->loadMesh(saturn_ring);
+    mesh_manager->drawMesh(saturn_ring);
+
     //  Draw spaceship
     mesh_manager->loadMesh(spaceship.mesh);
     mesh_manager->drawMesh(spaceship.mesh);
@@ -331,18 +342,13 @@ void draw_assets()
         };
     };
 
-    mesh_manager->loadMesh(saturn_planet);
-    mesh_manager->drawMesh(saturn_planet);
-    mesh_manager->loadMesh(saturn_ring);
-    mesh_manager->drawMesh(saturn_ring);
-
     //  Draw HUD
     //  Note: Text is drawn last to overlay
     text_manager->loadText(std::string("SHIP HEALTH: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
     text_manager->drawText(health_text_index);
     text_manager->loadText(std::string("AMMO: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f, ammo_text_index);
     text_manager->drawText(ammo_text_index);
-    text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 0.9f, 0.5f, 0.0f, points_text_index);
+    text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 1.0f, 1.0f, 1.0f, points_text_index);
     text_manager->drawText(points_text_index);
 };
 
@@ -393,7 +399,7 @@ void move_spaceship()
     if(mouse_x > (center_x) + mouse_sensitivity)
     {
         transformer.translateLightAsset(point_light, 0.2, 0.0, 0.0);
-        transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.01);
+        // transformer.translateCameraAsset(camera, -0.01, 0.0, 0.0, 0.01);
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, 0.1);
         transformer.rotateMeshAsset(spaceship.mesh, 0.2, 0.0, 0.0);
         window->snapCursor(center_x, center_y);
@@ -404,7 +410,7 @@ void move_spaceship()
     else if(mouse_x < (center_x) - mouse_sensitivity)
     {
         transformer.translateLightAsset(point_light, -0.2, 0.0, 0.0);
-        transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.01);
+        // transformer.translateCameraAsset(camera, 0.01, 0.0, 0.0, 0.01);
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.0, -0.1);
         transformer.rotateMeshAsset(spaceship.mesh, -0.2, 0.0, 0.0);
         window->snapCursor(center_x, center_y);
@@ -416,7 +422,7 @@ void move_spaceship()
     if(mouse_y > (center_y) + mouse_sensitivity)
     {
         transformer.translateLightAsset(point_light, 0.0, -0.2, 0.0);
-        transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.01);
+        // transformer.translateCameraAsset(camera, 0.0, 0.01, 0.0, 0.01);
         transformer.translateMeshAsset(spaceship.mesh, 0.0, -0.1, 0.0);
         window->snapCursor(center_x, center_y);
     }
@@ -424,7 +430,7 @@ void move_spaceship()
     else if(mouse_y < (center_y) - mouse_sensitivity)
     {
         transformer.translateLightAsset(point_light, 0.0, 0.2, 0.0);
-        transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.01);
+        // transformer.translateCameraAsset(camera, 0.0, -0.01, 0.0, 0.01);
         transformer.translateMeshAsset(spaceship.mesh, 0.0, 0.1, 0.0);
         window->snapCursor(center_x, center_y);
     };
@@ -515,7 +521,7 @@ void move_asteroids()
 
 void move_background()
 {
-    transformer.rotateMeshAsset(skybox.cube, 0.0, -0.2, 0.0);
+    transformer.rotateMeshAsset(skybox.cube, 0.0, 0.2, 0.0);
 };
 
 void move_powerup(PowerUp &powerup)
@@ -605,13 +611,19 @@ void move_rockets()
             missiles[i].is_travelling = true;
             missiles[i].y_spawn_offset = spaceship.mesh.locationY;
             missiles[i].z_spawn_offset = spaceship.mesh.locationZ;
-            transformer.translateMeshAsset(missiles[i].mesh, -1.0, missiles[i].y_spawn_offset, missiles[i].z_spawn_offset);
+            transformer.translateMeshAsset(missiles[i].mesh, -10.0, missiles[i].y_spawn_offset, missiles[i].z_spawn_offset);
+
+            //  Play rocket sample
+            // audio_manager->playAudio(samples[2]);
         };
 
         //  Advance traveling missiles
         if(missiles[i].is_travelling)
         {
+            //  Move missile and play audio
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
+            // audio_manager->updateSourceLocation(samples[2], -10.0, 0.0, 0.0);
+            // audio_manager->updateListenerLocation(missiles[i].mesh.locationX, 0.0, 0.0);
 
             //  Hold explosion glow for 30 frames
             if(frame_count >= 60 && brightness_last_tick > 0.0)
@@ -626,18 +638,18 @@ void move_rockets()
             for(int j = 0; j < asteroids.size(); j++)
             {
                 int colided = check_collisions(missiles[i].mesh, asteroids[j].mesh);
-                // missiles[i].explosion.brightness = 0.0;
                 if(colided == 1 && !asteroids[j].exploded && !missiles[i].has_colided)
                 {
                     player_points += asteroids[j].points_worth;
                     transformer.translateLightAsset(missiles[i].explosion, missiles[i].mesh.locationX, missiles[i].mesh.locationY, missiles[i].mesh.locationZ);
                     asteroids[j].exploded = true;
                     missiles[i].has_colided = true;
-                    //  TODO:
-                    //  Play audio 
                     missiles[i].explosion.brightness = 3.0;
                     brightness_last_tick = missiles[i].explosion.brightness;
+
                     fracture_asteroid(asteroids[j]);
+
+                    // audio_manager->pauseAudio(samples[2]);
                 };
             };
         }
@@ -649,12 +661,31 @@ void move_rockets()
             missiles[i].has_colided = false;
             missiles[i].explosion.brightness = 0.0;
             transformer.translateMeshAsset(missiles[i].mesh, 60.0f, -missiles[i].y_spawn_offset, -missiles[i].z_spawn_offset);
+
+            //  Pause the audio (if it hasn't been already upon coliding) and reset sound source location
+            // audio_manager->pauseAudio(samples[2]);
+            // audio_manager->updateSourceLocation(samples[2], 600.0, 0.0, 0.0);
         }
     };
 
     //  Retrieve latest keydown event
     //  Note: Used to control rate of fire
     keycode_last_tick = event_manager.keyCode;
+};
+
+void menu()
+{
+    //  Draw title menu
+    text_manager->loadText("SATURNS RAGE", (globals.getDisplayWidth() / 2) - 260, 1000, 10, 1.0, 0.0, 0.0, title_text_index);
+    text_manager->drawText(title_text_index);
+    text_manager->loadText("PRESS [ENTER] TO BEGIN", (globals.getDisplayWidth() / 2) - 500, globals.getDisplayHeight() / 2, 10, 1.0, 1.0, 1.0, begin_text_index);
+    text_manager->drawText(begin_text_index);
+
+    //  End menu rendering
+    if(event_manager.keyCode == 257)
+    {
+        player_ready = true;
+    };
 };
 
 int main()
@@ -668,19 +699,25 @@ int main()
     {
         event_manager.listen();
 
-        std::cout << "Points: " << player_points << std::endl;
-
+        //  Game start
+        if(player_ready)
+        {
         //  Render scene
-        load_environment();
-        draw_assets();
+            load_environment();
+            draw_assets();
 
-        //  Do game mechanics
-        move_spaceship();
-        move_asteroids();
-        move_powerup(ammo_bonus);
-        move_powerup(health_bonus);
-        move_background();
-        move_rockets();
+            //  Do game mechanics
+            move_spaceship();
+            move_asteroids();
+            move_powerup(ammo_bonus);
+            move_powerup(health_bonus);
+            move_background();
+            move_rockets();
+        }
+        else
+        {
+            menu();
+        };
 
         if
         (
