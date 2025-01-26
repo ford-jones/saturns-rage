@@ -31,29 +31,9 @@ float   rotation_x_last_tick    = 0.0;
 float   rotation_z_last_tick    = 0.0;
 float   brightness_last_tick    = 0.0;
 
-std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
-std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
-std::unique_ptr<Lazarus::CameraManager> camera_manager   = nullptr;
-std::unique_ptr<Lazarus::TextManager>   text_manager     = nullptr;
-std::unique_ptr<Lazarus::LightManager>  light_manager    = nullptr;
-std::unique_ptr<Lazarus::MeshManager>   mesh_manager     = nullptr;
-std::unique_ptr<Lazarus::WorldFX>       world            = nullptr;
-
-Lazarus::Shader                         shader_program;
-Lazarus::Transform                      transformer;
-Lazarus::EventManager                   event_manager;
-Lazarus::GlobalsManager                 globals;
-
-Lazarus::CameraManager::Camera          camera          = {};
-Lazarus::LightManager::Light            point_light     = {};
-Lazarus::WorldFX::SkyBox                skybox          = {};
-
-int health_text_index = 0;
-int ammo_text_index = 0;
-
 struct Asteroid
 {
-    int damage_modifier, z_spawn_offset, y_spawn_offset;
+    int damage_modifier, z_spawn_offset, y_spawn_offset, points_worth;
     float z_rotation, y_rotation, movement_speed, scale;
     bool has_colided, is_fragment, exploded;
 
@@ -70,8 +50,7 @@ struct PowerUp
 struct Missile
 {
     float y_spawn_offset, z_spawn_offset;
-    bool is_travelling;
-    bool has_colided;
+    bool is_travelling, has_colided;
     Lazarus::MeshManager::Mesh mesh;
     Lazarus::LightManager::Light explosion;
 };
@@ -83,6 +62,31 @@ struct Spaceship
     std::vector<Missile> missiles;
     Lazarus::MeshManager::Mesh mesh;
 };
+
+std::unique_ptr<Lazarus::AudioManager>  audio_manager    = std::make_unique<Lazarus::AudioManager>();
+std::unique_ptr<Lazarus::WindowManager> window           = nullptr;
+std::unique_ptr<Lazarus::CameraManager> camera_manager   = nullptr;
+std::unique_ptr<Lazarus::TextManager>   text_manager     = nullptr;
+std::unique_ptr<Lazarus::LightManager>  light_manager    = nullptr;
+std::unique_ptr<Lazarus::MeshManager>   mesh_manager     = nullptr;
+std::unique_ptr<Lazarus::WorldFX>       world            = nullptr;
+
+Lazarus::Shader                         shader_program;
+Lazarus::Transform                      transformer;
+Lazarus::EventManager                   event_manager;
+Lazarus::GlobalsManager                 globals;
+
+Lazarus::CameraManager::Camera          camera          = {};
+Lazarus::LightManager::Light            point_light     = {};
+Lazarus::WorldFX::SkyBox                skybox          = {};
+Lazarus::MeshManager::Mesh              saturn_planet   = {};
+Lazarus::MeshManager::Mesh              saturn_ring     = {};
+
+int player_points = 0;
+
+int health_text_index = 0;
+int ammo_text_index = 0;
+int points_text_index = 0;
 
 std::vector<Lazarus::AudioManager::Audio> samples = {};
 std::vector<Missile> missiles = {};
@@ -154,6 +158,7 @@ void init()
         //  Note: Between +2.0 and +4.0
         asteroid.scale = (rand_offset_a + 8.0f) / 4.0f;
         asteroid.damage_modifier = base_collision_damage + asteroid.scale;
+        asteroid.points_worth = ceil(asteroid.scale * 8.0);
         
         asteroid.mesh = mesh_manager->create3DAsset("assets/mesh/asteroid.obj", "assets/material/asteroid.mtl", "assets/images/rock.png");
         //  Start each asteroid at a different distance offset, so that they pass the respawn threshold at different times.
@@ -211,8 +216,9 @@ void init()
 
     //  HUD
     text_manager->extendFontStack("assets/fonts/clock.ttf", 50);
-    health_text_index = text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f);
-    ammo_text_index = text_manager->loadText(std::string("Ammo: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f);
+    health_text_index = text_manager->loadText(std::string("SHIP HEALTH: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f);
+    ammo_text_index = text_manager->loadText(std::string("AMMO: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f);
+    points_text_index = text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 0.9f, 0.5f, 0.0f);
 
     //  Load audio
     samples.push_back(audio_manager->createAudio("assets/sound/crash1.mp3"));
@@ -250,6 +256,7 @@ void fracture_asteroid(Asteroid parent)
             //  Make fragment 2x smaller than parent
             asteroid.scale = parent.scale / 2.0;
             asteroid.damage_modifier = floor(base_collision_damage + asteroid.scale);
+            asteroid.points_worth = ceil(asteroid.scale * 8.0);
 
             //  Copy parent's mesh, including it's current location
             asteroid.mesh = parent.mesh;
@@ -318,10 +325,12 @@ void draw_assets()
 
     //  Draw HUD
     //  Note: Text is drawn last to overlay
-    text_manager->loadText(std::string("Ship health: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
+    text_manager->loadText(std::string("SHIP HEALTH: ").append(std::to_string(spaceship.health)), 0, 0, 10, 1.0f, 0.0f, 0.0f, health_text_index);
     text_manager->drawText(health_text_index);
-    text_manager->loadText(std::string("Ammo: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f, ammo_text_index);
+    text_manager->loadText(std::string("AMMO: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f, ammo_text_index);
     text_manager->drawText(ammo_text_index);
+    text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 0.9f, 0.5f, 0.0f, points_text_index);
+    text_manager->drawText(points_text_index);
 };
 
 int check_collisions(Lazarus::MeshManager::Mesh a, Lazarus::MeshManager::Mesh b)
@@ -472,7 +481,7 @@ void move_asteroids()
 
             //  Set crash1.mp3 back to begining and play
             audio_manager->setPlaybackCursor(samples[0], 1);
-            // audio_manager->playAudio(samples[0]);
+            audio_manager->playAudio(samples[0]);
 
             //  Bounce asteroid off ship
             generate_random_numbers();
@@ -480,7 +489,7 @@ void move_asteroids()
             asteroids[i].y_rotation = rand_offset_b * 3.0;
             transformer.rotateMeshAsset(asteroids[i].mesh, 0.0, asteroids[i].y_rotation, asteroids[i].z_rotation);
 
-            //  Update ship health
+            //  Update SHIP HEALTH
             spaceship.health -= asteroids[i].damage_modifier;
 
             if(spaceship.health <= 0)
@@ -607,6 +616,7 @@ void move_rockets()
                 // missiles[i].explosion.brightness = 0.0;
                 if(colided == 1 && !asteroids[j].exploded && !missiles[i].has_colided)
                 {
+                    player_points += asteroids[j].points_worth;
                     transformer.translateLightAsset(missiles[i].explosion, missiles[i].mesh.locationX, missiles[i].mesh.locationY, missiles[i].mesh.locationZ);
                     asteroids[j].exploded = true;
                     missiles[i].has_colided = true;
@@ -629,7 +639,6 @@ void move_rockets()
         }
     };
 
-
     //  Retrieve latest keydown event
     //  Note: Used to control rate of fire
     keycode_last_tick = event_manager.keyCode;
@@ -640,11 +649,13 @@ int main()
     init();
     window->open();
 
-    // audio_manager->playAudio(samples[1]);
+    audio_manager->playAudio(samples[1]);
 
     while(window->isOpen)
     {
         event_manager.listen();
+
+        std::cout << "Points: " << player_points << std::endl;
 
         //  Render scene
         load_environment();
