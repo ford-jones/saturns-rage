@@ -4,7 +4,6 @@
     Jan 24 2025
     Lazarus v0.5.2
 ============================================ */
-
 #include <lazarus.h>
 #include <memory>
 #include <random>
@@ -30,11 +29,12 @@ const int8_t   health_bonus_frequency  = 100;
 const int8_t   max_health              = 100;
 const int8_t   max_ammo                = 30;
 
-int8_t   frame_count             = 0;
-int8_t   keycode_last_tick       = 0;
-_Float32   rotation_x_last_tick    = 0.0;
-_Float32   rotation_z_last_tick    = 0.0;
-_Float32   brightness_last_tick    = 0.0;
+int8_t      frame_count             = 0;
+uint16_t    keycode_last_tick       = 0;
+_Float32    menu_rotation           = 0.0;
+_Float32    rotation_x_last_tick    = 0.0;
+_Float32    rotation_z_last_tick    = 0.0;
+_Float32    brightness_last_tick    = 0.0;
 
 struct Asteroid
 {
@@ -48,7 +48,8 @@ struct Asteroid
 
 struct PowerUp
 {
-    int8_t modifier, x_spawn_offset, y_spawn_offset, appearance_frequency, type;
+    int8_t modifier, x_spawn_offset, y_spawn_offset, type;
+    int16_t appearance_frequency;
     int32_t asteroid_counter; 
     bool has_colided;
     Lazarus::MeshManager::Mesh mesh;
@@ -273,7 +274,6 @@ void fracture_asteroid(Asteroid parent)
             transformer.scaleMeshAsset(asteroid.mesh, asteroid.scale, asteroid.scale, asteroid.scale);
             transformer.rotateMeshAsset(asteroid.mesh, 0.0, asteroid.y_rotation, asteroid.z_rotation);
 
-
             asteroids.push_back(asteroid);
         };
     }
@@ -344,7 +344,7 @@ void draw_assets()
     text_manager->drawText(health_text_index);
     text_manager->loadText(std::string("AMMO: ").append(std::to_string(spaceship.ammo)), (globals.getDisplayWidth() - 330), 0, 10, 0.9f, 0.5f, 0.0f, ammo_text_index);
     text_manager->drawText(ammo_text_index);
-    text_manager->loadText(std::string("SCORE: ").append(std::to_string(asteroids.size())), 0, (globals.getDisplayHeight() - 50), 10, 1.0f, 1.0f, 1.0f, points_text_index);
+    text_manager->loadText(std::string("SCORE: ").append(std::to_string(player_points)), 0, (globals.getDisplayHeight() - 50), 10, 1.0f, 1.0f, 1.0f, points_text_index);
     text_manager->drawText(points_text_index);
 };
 
@@ -540,7 +540,7 @@ void move_powerup(PowerUp &powerup)
 
         transformer.translateMeshAsset(powerup.mesh, -static_cast<_Float32>(-powerup.x_spawn_offset), static_cast<_Float32>(-powerup.y_spawn_offset), 0.0);
         
-        //  Move health to random offset from center
+        //  Move powerup to random offset from center
         _GEN_RAND_PAIR(powerup.x_spawn_offset, powerup.y_spawn_offset);
         transformer.translateMeshAsset(powerup.mesh, static_cast<_Float32>(powerup.x_spawn_offset), static_cast<_Float32>(powerup.y_spawn_offset), 0.0);
     };
@@ -605,7 +605,7 @@ void move_rockets()
                     transformer.translateLightAsset(missiles[i].explosion, missiles[i].mesh.locationX, missiles[i].mesh.locationY, missiles[i].mesh.locationZ);
                     asteroids[j].exploded = true;
                     missiles[i].has_colided = true;
-                    missiles[i].explosion.brightness = 3.0;
+                    missiles[i].explosion.brightness = 4.0;
                     brightness_last_tick = missiles[i].explosion.brightness;
 
                     fracture_asteroid(asteroids[j]);
@@ -636,6 +636,16 @@ void move_rockets()
 
 void menu()
 {
+    //  Spinning spaceship
+    camera_manager->loadCamera(camera);
+    light_manager->loadLightSource(point_light);
+    mesh_manager->loadMesh(spaceship.mesh);
+    mesh_manager->drawMesh(spaceship.mesh);
+    
+    menu_rotation += 0.3;
+    // if(menu_rotation > 360.0) menu_rotation = 0.0;
+    transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.3, 0.0);
+
     //  Draw title menu
     text_manager->loadText("SATURNS RAGE", (globals.getDisplayWidth() / 2) - 260, 1000, 10, 1.0, 0.0, 0.0, title_text_index);
     text_manager->drawText(title_text_index);
@@ -643,10 +653,12 @@ void menu()
     text_manager->drawText(begin_text_index);
 
     //  End menu rendering
-    if(event_manager.keyCode == 257)
+    if(event_manager.keyCode == 257) 
     {
+        transformer.rotateMeshAsset(spaceship.mesh, 0.0, -menu_rotation, 0.0);
         player_ready = true;
     };
+
 };
 
 int main()
