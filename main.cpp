@@ -1,7 +1,7 @@
 /* =========================================
     Saturns Rage
     Ford Jones
-    Jan 24 2025
+    Feb 4 2025
     Lazarus v0.5.2
 ============================================ */
 #include <lazarus.h>
@@ -231,7 +231,8 @@ void init()
     //  Load audio
     samples.push_back(audio_manager->createAudio("assets/sound/crash1.mp3"));
     samples.push_back(audio_manager->createAudio("assets/sound/headswirler.wav", false, -1));
-    // samples.push_back(audio_manager->createAudio("assets/sound/rocket.mp3", true, -1));
+    samples.push_back(audio_manager->createAudio("assets/sound/missile_travel.mp3", false, -1));
+    samples.push_back(audio_manager->createAudio("assets/sound/missile_impact.mp3", false, -1));
     for(uint32_t i = 0; i < samples.size(); i++)
     {
         audio_manager->loadAudio(samples[i]);
@@ -331,7 +332,7 @@ void draw_assets()
     //  Draw missiles
     for(uint32_t i = 0; i < missiles.size(); i++)
     {
-        if(missiles[i].is_travelling)
+        if(missiles[i].is_travelling && !missiles[i].has_colided)
         {
             mesh_manager->loadMesh(missiles[i].mesh);
             mesh_manager->drawMesh(missiles[i].mesh);
@@ -575,7 +576,7 @@ void move_rockets()
             transformer.translateMeshAsset(missiles[i].mesh, -10.0, missiles[i].y_spawn_offset, missiles[i].z_spawn_offset);
 
             //  Play rocket sample
-            // audio_manager->playAudio(samples[2]);
+            audio_manager->playAudio(samples[2]);
         };
 
         //  Advance traveling missiles
@@ -583,8 +584,6 @@ void move_rockets()
         {
             //  Move missile and play audio
             transformer.translateMeshAsset(missiles[i].mesh, -1.0, 0.0, 0.0);
-            // audio_manager->updateSourceLocation(samples[2], -10.0, 0.0, 0.0);
-            // audio_manager->updateListenerLocation(missiles[i].mesh.locationX, 0.0, 0.0);
 
             //  Hold explosion glow for 30 frames
             if(frame_count >= 60 && brightness_last_tick > 0.0)
@@ -610,22 +609,32 @@ void move_rockets()
 
                     fracture_asteroid(asteroids[j]);
 
-                    // audio_manager->pauseAudio(samples[2]);
+                    //  stop playing missile_travel.mp3, start playing missile_impact.mp3
+                    audio_manager->pauseAudio(samples[2]);
+                    audio_manager->setPlaybackCursor(samples[3], 1);
+                    audio_manager->playAudio(samples[3]);
                 };
             };
         }
 
         //  Reset missiles which have reached the bounds
-        if(missiles[i].mesh.locationX <= -60.0f)
+        if(missiles[i].mesh.locationX <= -100.0f)
         {
             missiles[i].is_travelling = false;
             missiles[i].has_colided = false;
             missiles[i].explosion.brightness = 0.0;
-            transformer.translateMeshAsset(missiles[i].mesh, 60.0f, -missiles[i].y_spawn_offset, -missiles[i].z_spawn_offset);
+            transformer.translateMeshAsset(missiles[i].mesh, 100.0f, -missiles[i].y_spawn_offset, -missiles[i].z_spawn_offset);
 
             //  Pause the audio (if it hasn't been already upon coliding) and reset sound source location
-            // audio_manager->pauseAudio(samples[2]);
-            // audio_manager->updateSourceLocation(samples[2], 600.0, 0.0, 0.0);
+            if(!samples[2].isPaused)
+            {
+                audio_manager->pauseAudio(samples[2]);
+            }
+
+            if(!samples[3].isPaused)
+            {
+                audio_manager->pauseAudio(samples[3]);
+            }
         }
     };
 
@@ -636,14 +645,13 @@ void move_rockets()
 
 void menu()
 {
-    //  Spinning spaceship
+    //  Spin spaceship
     camera_manager->loadCamera(camera);
     light_manager->loadLightSource(point_light);
     mesh_manager->loadMesh(spaceship.mesh);
     mesh_manager->drawMesh(spaceship.mesh);
     
     menu_rotation += 0.3;
-    // if(menu_rotation > 360.0) menu_rotation = 0.0;
     transformer.rotateMeshAsset(spaceship.mesh, 0.0, 0.3, 0.0);
 
     //  Draw title menu
